@@ -11,7 +11,7 @@ pub static mut IDT: Idt = Idt {
 pub struct Entry {
     pointer_low: u16,
     gdt_selector: u16,
-    options: u16, // ist (3 bits) + reserved (5 bits) + type (4 bits) + 0 (1 bit) + dpl (2 bits) + p (1 bit)
+    options: u16,
     pointer_middle: u16,
     pointer_high: u32,
     reserved: u32,
@@ -19,7 +19,7 @@ pub struct Entry {
 
 impl Entry {
     pub fn set(&mut self, offset: u64) {
-        self.gdt_selector = 0x28; // Kernel Code
+        self.gdt_selector = 0x28;
         self.pointer_low = (offset & 0xFFFF) as u16;
         self.pointer_middle = ((offset >> 16) & 0xFFFF) as u16;
         self.pointer_high = (offset >> 32) as u32;
@@ -33,7 +33,7 @@ impl Entry {
 
     #[allow(dead_code)]
     pub fn set_ring_3(&mut self, offset: u64) {
-        self.gdt_selector = 0x28; // Kernel Code
+        self.gdt_selector = 0x28;
         self.pointer_low = (offset & 0xFFFF) as u16;
         self.pointer_middle = ((offset >> 16) & 0xFFFF) as u16;
         self.pointer_high = (offset >> 32) as u32;
@@ -85,13 +85,11 @@ impl Idt {
         self.entries[5].set(crate::interrupts::exceptions::bounds as u64);
         self.entries[6].set(crate::interrupts::exceptions::invalid_opcode as u64);
         
-        // Double Fault: Use IST Index 1
         self.entries[8].set(crate::interrupts::exceptions::double_fault as u64);
         self.entries[8].set_ist(1); 
 
         self.entries[13].set(crate::interrupts::exceptions::general_protection_fault as u64);
 
-        // Page Fault: Use IST Index 2
         self.entries[14].set(crate::interrupts::exceptions::page_fault as u64);
         self.entries[14].set_ist(2);
     }
@@ -100,10 +98,6 @@ impl Idt {
         self.add_ring_3(exceptions::TIMER_INT as usize, task::timer_handler as u64);
         self.add(exceptions::KEYBOARD_INT as usize, exceptions::keyboard_handler as u64);
         self.add(exceptions::MOUSE_INT as usize, exceptions::mouse_handler as u64);
-        
-        // Syscall (int 0x80) is replaced by SYSCALL instruction via MSRs.
-        // The old entry point is no longer needed.
-        // self.add_ring_3(0x80, syscalls::int80_handler as u64);
     }
 }
 

@@ -1,4 +1,4 @@
-use core::arch::asm; // Added this import
+use core::arch::asm;
 
 pub const PAGE_PRESENT: u64 = 1 << 0;
 pub const PAGE_WRITABLE: u64 = 1 << 1;
@@ -26,7 +26,6 @@ impl PageTable {
     }
 }
 
-// Helper to access physical memory directly (assuming identity map or similar)
 pub unsafe fn active_level_4_table() -> &'static mut PageTable {
     let cr3: u64;
     unsafe { asm!("mov {}, cr3", out(reg) cr3) };
@@ -38,8 +37,6 @@ pub unsafe fn get_table<'a>(entry: u64) -> Option<&'a mut PageTable> {
     if entry & PAGE_PRESENT == 0 {
         return None;
     }
-    // If huge page bit is set at this level (not expected for L4/L3 usually, but L2 yes), return None 
-    // because it points to memory, not a table.
     if entry & PAGE_HUGE != 0 {
         return None;
     }
@@ -56,12 +53,12 @@ pub unsafe fn get_entry_ptr(virt: u64) -> Option<*mut u64> {
     let p3 = unsafe { get_table(p3_entry) }?;
     let p3_idx = (virt >> 30) & 0x1FF;
 
-    let p2_entry = p3.entries[p3_idx as usize]; // Fixed: Changed p2_idx to p3_idx
+    let p2_entry = p3.entries[p3_idx as usize];
     let p2 = unsafe { get_table(p2_entry) }?;
     let p2_idx = (virt >> 21) & 0x1FF;
 
     let p1_entry = p2.entries[p2_idx as usize];
-    let p1 = unsafe { get_table(p1_entry) }?; // This fails if P2 is a huge page
+    let p1 = unsafe { get_table(p1_entry) }?;
     let p1_idx = (virt >> 12) & 0x1FF;
 
     Some(&mut p1.entries[p1_idx as usize] as *mut u64)
@@ -72,8 +69,6 @@ pub unsafe fn translate_addr(virt: u64) -> Option<u64> {
     Some(phys)
 }
 
-/// Translates a virtual address to a physical address and returns the page table entry flags.
-/// Returns `None` if the address is not mapped.
 pub unsafe fn translate_addr_with_entry(virt: u64) -> Option<(u64, u64)> {
     let p4 = unsafe { active_level_4_table() };
     let p4_idx = (virt >> 39) & 0x1FF;
@@ -81,7 +76,6 @@ pub unsafe fn translate_addr_with_entry(virt: u64) -> Option<(u64, u64)> {
     let p3_entry = p4.entries[p4_idx as usize];
     if p3_entry & PAGE_PRESENT == 0 { return None; }
     if p3_entry & PAGE_HUGE != 0 {
-        // 1GB Page
         let offset = virt & 0x3FFFFFFF;
         return Some(((p3_entry & 0x000FFFFFC0000000) + offset, p3_entry));
     }
@@ -92,7 +86,6 @@ pub unsafe fn translate_addr_with_entry(virt: u64) -> Option<(u64, u64)> {
     let p2_entry = p3.entries[p3_idx as usize];
     if p2_entry & PAGE_PRESENT == 0 { return None; }
     if p2_entry & PAGE_HUGE != 0 {
-        // 2MB Page
         let offset = virt & 0x1FFFFF;
         return Some(((p2_entry & 0x000FFFFFFFE00000) + offset, p2_entry));
     }
@@ -115,7 +108,7 @@ pub unsafe fn translate_addr_with_entry(virt: u64) -> Option<(u64, u64)> {
 
 pub unsafe fn get_table_from_phys<'a>(phys_addr: u64) -> Option<&'a mut PageTable> {
     if phys_addr % PAGE_SIZE != 0 {
-        return None; // Address must be page-aligned
+        return None;
     }
     Some(unsafe { &mut *(phys_addr as *mut PageTable) })
 }

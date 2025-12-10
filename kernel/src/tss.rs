@@ -30,7 +30,6 @@ use crate::memory::{pmm, vmm, paging};
 
 pub fn init_ists() {
     unsafe {
-        // Find existing TSS base from GDT
         let tr: u16;
         core::arch::asm!("str {:x}", out(reg) tr);
         
@@ -40,7 +39,6 @@ pub fn init_ists() {
         let gdt_base = gdt_ptr.offset;
         let tr_index = tr >> 3;
         
-        // TSS descriptor is 16 bytes (2 entries)
         let tss_desc_low_ptr = (gdt_base + (tr_index as u64 * 8)) as *mut u64;
         let tss_desc_high_ptr = (gdt_base + (tr_index as u64 * 8) + 8) as *mut u64;
         
@@ -55,11 +53,9 @@ pub fn init_ists() {
         
         let tss_struct = base as *mut TaskStateSegment;
 
-        // Allocate IST 1 (Double Fault)
         let ist1_frame = pmm::allocate_frame().expect("TSS: OOM for IST1");
         (*tss_struct).ist1 = ist1_frame + 4096;
 
-        // Allocate IST 2 (Page Fault)
         let ist2_frame = pmm::allocate_frame().expect("TSS: OOM for IST2");
         (*tss_struct).ist2 = ist2_frame + 4096;
         
@@ -70,10 +66,6 @@ pub fn init_ists() {
 
 pub fn set_tss(kernel_stack: u64) {
     unsafe {
-        // We must lookup TSS every time if we don't store the pointer globally.
-        // For performance, we could cache it, but let's be safe and lookup.
-        // Actually, `init_ists` runs once. We can assume TR doesn't change.
-        
         let tr: u16;
         core::arch::asm!("str {:x}", out(reg) tr);
         

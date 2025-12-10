@@ -1,5 +1,5 @@
 use crate::drivers::port::{inb, outb};
-use crate::drivers::periferics::keyboard::KEYBOARD_BUFFER; // Import KEYBOARD_BUFFER
+use crate::drivers::periferics::keyboard::KEYBOARD_BUFFER;
 
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
@@ -51,11 +51,10 @@ pub extern "x86-interrupt" fn double_fault(_info: &mut StackFrame, _error_code: 
 }
 
 pub extern "x86-interrupt" fn general_protection_fault(info: &mut StackFrame, error_code: u64) {
-    serial_print("=== GENERAL PROTECTION FAULT ===");
+    serial_print("=== GENERAL PROTECTION FAULT===");
 
-    // Decode error code
     let external = (error_code & 0x1) != 0;
-    let table = (error_code >> 1) & 0x3; // 0=GDT, 1=IDT, 2=LDT, 3=IDT
+    let table = (error_code >> 1) & 0x3;
     let index = (error_code >> 3) & 0x1FFF;
 
     use core::fmt::Write;
@@ -90,7 +89,6 @@ pub extern "x86-interrupt" fn page_fault(info: &mut StackFrame, error_code: u64)
     let _ = write!(writer, "RSP: {:#x}\n", info.stack_pointer);
     let _ = write!(writer, "SS: {:#x}\n", info.stack_segment);
     
-    // Analyze Error Code
     let present = (error_code & 1) != 0;
     let write = (error_code & 2) != 0;
     let user = (error_code & 4) != 0;
@@ -107,7 +105,6 @@ pub extern "x86-interrupt" fn generic_handler(_info: &mut StackFrame) {
     loop {}
 }
 
-/* SPECIFIC STUFF */
 
 #[allow(dead_code)]
 pub const NET_INT: u8 = 43;
@@ -118,7 +115,6 @@ pub const KEYBOARD_INT: u8 = 33;
 
 pub extern "x86-interrupt" fn keyboard_handler(_info: &mut StackFrame) {
     let scancode: u8 = inb(0x60);
-    // crate::debugln!("KEYBOARD IRQ: {:#x}", scancode); // Uncomment if needed, but let's test mouse first.
 
     if let Some(character) = crate::drivers::periferics::keyboard::handle_scancode(scancode) {
         KEYBOARD_BUFFER.lock().push_back(character); 
@@ -139,13 +135,9 @@ pub extern "x86-interrupt" fn mouse_handler(_info: &mut StackFrame) {
     use crate::drivers::periferics::mouse::{MOUSE_PACKET, MOUSE_IDX, MOUSE_PACKET_SIZE};
 
     let data = inb(0x60);
-    // crate::debugln!("[MOUSE IRQ] Data: {:#x}", data);
 
     unsafe {
-        // Sync check: Byte 0 must have Bit 3 set (always 1 for standard/IntelliMouse packets)
-        // This prevents misalignment if we drop a byte.
         if MOUSE_IDX == 0 && (data & 0x08) == 0 {
-            // crate::debugln!("[MOUSE] Lost Sync (Byte 0: {:#x})", data);
             (*(&raw const crate::interrupts::pic::PICS)).end_interrupt(MOUSE_INT);
             return;
         }
@@ -154,12 +146,10 @@ pub extern "x86-interrupt" fn mouse_handler(_info: &mut StackFrame) {
         MOUSE_IDX += 1;
 
         if MOUSE_IDX >= MOUSE_PACKET_SIZE {
-            // Pad with 0 if packet size is 3 but struct expects 4
             if MOUSE_PACKET_SIZE == 3 {
                 MOUSE_PACKET[3] = 0;
             }
             
-            // crate::debugln!("[MOUSE] Packet: {:?} {:?} {:?} {:?}", MOUSE_PACKET[0], MOUSE_PACKET[1], MOUSE_PACKET[2], MOUSE_PACKET[3]);
             (*(&raw mut crate::composer::MOUSE)).cursor(MOUSE_PACKET);
             MOUSE_IDX = 0;
         }

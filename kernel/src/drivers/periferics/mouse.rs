@@ -8,12 +8,10 @@ pub static mut MOUSE_PACKET: [u8; 4] = [0; 4];
 pub static mut MOUSE_IDX: usize = 0;
 pub static mut MOUSE_PACKET_SIZE: usize = 3; 
 
-// Cursor definitions
 const O: u32 = 0x0000_0000;
 const B: u32 = 0x0000_00FF;
 const T: u32 = 0xFFFF_FFFF;
 
-// Original 8x12 cursor pattern
 pub const CURSOR_BUFFER: [u32; 1024] = [
     B, B, B, B, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O,
     B, B, B, B, B, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O,
@@ -49,16 +47,13 @@ pub const CURSOR_BUFFER: [u32; 1024] = [
     B, B, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O, O,
 ];
 
-// Global cursor buffer - 32x32 max size
 pub const CURSOR_WIDTH: usize = 32;
 pub const CURSOR_HEIGHT: usize = 32;
 
-// Initialize mouse driver and generate the scaled cursor
 pub fn init_mouse() {
     debugln!("[MOUSE] Initializing...");
 
 
-    // --- PS/2 Initialization ---
     wait();
     outb(0x64, 0xA8);
     

@@ -1,4 +1,3 @@
-
 #[allow(unused_imports)]
 use elfic::{Elf64, Elf64Phdr, ProgramType, ProgramFlags, Elf64Rela, Elf64Sym};
 use crate::memory::{pmm, vmm, paging};
@@ -15,7 +14,6 @@ unsafe fn virt_to_phys(pml4_phys: u64, virt: u64) -> Option<u64> {
     let p2_entry = p3.entries[p3_idx as usize];
     if p2_entry & paging::PAGE_PRESENT == 0 { return None; }
     
-    // Check for 1GB Huge Page (L3 Entry)
     if p2_entry & paging::PAGE_HUGE != 0 {
         let offset = virt & 0x3FFFFFFF;
         return Some((p2_entry & 0x000FFFFFC0000000) + offset);
@@ -26,7 +24,6 @@ unsafe fn virt_to_phys(pml4_phys: u64, virt: u64) -> Option<u64> {
     let p1_entry = p2.entries[p2_idx as usize];
     if p1_entry & paging::PAGE_PRESENT == 0 { return None; }
     
-    // Check for 2MB Huge Page (L2 Entry)
     if p1_entry & paging::PAGE_HUGE != 0 {
         let offset = virt & 0x1FFFFF;
         return Some((p1_entry & 0x000FFFFFFFE00000) + offset);
@@ -57,7 +54,6 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64) -> Result<u64, alloc::string
     }
 
     debugln!("[ELF] Starting segment loading phase. Total PHDRs: {}", elf.header.e_phnum + 0);
-    // 1. Load Segments
     for (i, phdr) in elf.program_headers().into_iter().enumerate() {
         let phdr_p_type = phdr.p_type;
         let phdr_p_vaddr = phdr.p_vaddr;
@@ -79,14 +75,12 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64) -> Result<u64, alloc::string
             let virt_start = phdr.p_vaddr + load_base;
             let virt_end = virt_start + phdr.p_memsz;
             
-            // Check for Kernel Overlap
             if virt_end >= 0xFFFF_8000_0000_0000 {
                 return Err(alloc::format!("ELF Segment overlaps with Kernel memory: {:#x}", virt_end));
             }
 
             debugln!("[ELF]   - Segment: virt_start={:#x}, virt_end={:#x}, filesz={:#x}", virt_start, virt_end, phdr_p_filesz);
 
-            // Check if Entry Point is in this segment and verify file data
             let entry_point = elf.header.e_entry + load_base;
             if entry_point >= virt_start && entry_point < virt_end {
                 let entry_offset_in_segment = entry_point - virt_start;
@@ -120,17 +114,12 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64) -> Result<u64, alloc::string
                 let frame: u64;
 
                 if virt < 0x1_0000_0000 {
-                    // Identity Mapped Region (0-4GiB)
-                    // Use existing physical frame. Mark as used in PMM just for accounting.
                     let phys = virt;
                     if !pmm::reserve_frame(phys) {
-                        // Already used. Just continue.
                     }
                     frame = phys;
-                    // NO MAP_PAGE CALL. Trust the bootloader.
 
                 } else {
-                    // High Memory (> 4GB) - Not supported in "Raw RAM" model without paging
                     panic!("ELF Segment at {:#x} exceeds 4GB Identity Map!", virt);
                 }
                 
@@ -149,7 +138,6 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64) -> Result<u64, alloc::string
                 let mut current_virt = virt_start;
                 
                 while remaining > 0 {
-                    // Calculate physical address - Identity Map means phys = virt
                     let phys_addr = current_virt;
 
                     let page_offset = (current_virt % paging::PAGE_SIZE) as usize;
@@ -175,7 +163,6 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64) -> Result<u64, alloc::string
     debugln!("[ELF] Segment loading phase completed.");
 
     debugln!("[ELF] Starting relocation phase.");
-    // 2. Find Symbol Table (DYNSYM) for relocations
     let mut dynsym_shdr: Option<&elfic::Elf64Shdr> = None;
     for shdr in elf.section_headers() {
         if shdr.sh_type == 11 { // SHT_DYNSYM
@@ -186,7 +173,6 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64) -> Result<u64, alloc::string
         }
     }
 
-    // 3. Perform Relocations
     if load_base > 0 {
         for shdr in elf.section_headers() {
             if shdr.sh_type == 4 { // SHT_RELA
@@ -210,40 +196,29 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64) -> Result<u64, alloc::string
                      let target_virt = rela.r_offset + load_base;
                      
                      let rela_r_offset = rela.r_offset;
-                     //debugln!("[ELF]     - Rela {}: type={}, sym={}, offset={:#x}", k, r_type, r_sym, rela_r_offset);
 
                      let mut val: u64 = 0;
                      let mut found_val = false;
 
                      match r_type {
                          8 => { // R_X86_64_RELATIVE
-                             // B + A
                              val = load_base.wrapping_add(rela.r_addend as u64);
                              found_val = true;
-                             //debugln!("[ELF]       - RELATIVE: val={:#x}", val);
                          }
                          1 | 6 | 7 => { // R_X86_64_64 (1), GLOB_DAT (6), JUMP_SLOT (7)
-                             // S + A (64) or S (GLOB_DAT/JUMP_SLOT)
-                             // We need to lookup the symbol value
                              if let Some(sym_tab) = dynsym_shdr {
                                  let sym_offset = sym_tab.sh_offset as usize + (r_sym as usize * core::mem::size_of::<Elf64Sym>());
                                  if sym_offset < data.len() {
                                      let sym = unsafe { &*(data.as_ptr().add(sym_offset) as *const Elf64Sym) };
                                      
-                                     if sym.st_shndx != 0 { // If defined in ELF
+                                     if sym.st_shndx != 0 {
                                          val = sym.st_value + load_base;
                                          let sym_st_value = sym.st_value;
-                                         //debugln!("[ELF]       - SYMBOL (defined): sym_val={:#x}, final_val={:#x}", sym_st_value, val);
                                      } else {
-                                         // Undefined symbol (Imported).
-                                         // In a real OS, we would look this up in Kernel exports or Shared Libs.
-                                         // For now, we leave it as 0 (weak) or fail.
-                                         //debugln!("[ELF]       - Warning: Undefined symbol index {} (leaving as 0).", r_sym);
                                      }
                                      
-                                     if r_type == 1 { // R_X86_64_64 adds addend
+                                     if r_type == 1 {
                                          val = val.wrapping_add(rela.r_addend as u64);
-                                         //debugln!("[ELF]       - R_X86_64_64: val after addend={:#x}", val);
                                      }
                                      found_val = true;
                                  }
@@ -253,17 +228,13 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64) -> Result<u64, alloc::string
                          }
                          _ => {
                              debugln!("[ELF]       - Unhandled relocation type: {}", r_type);
-                             // Ignore others for now (NONE, COPY, etc)
                          }
                      }
 
                      if found_val {
-                         //debugln!("[ELF]     - Applying relocation to virt {:#x} with value {:#x}", target_virt, val);
                          if let Some(phys) = unsafe { virt_to_phys(target_pml4_phys, target_virt) } {
                              unsafe {
-                                 //debugln!("[ELF]       - Translated target_virt {:#x} to phys {:#x}", target_virt, phys);
                                  *(phys as *mut u64) = val;
-                                 //debugln!("[ELF]       - Relocation applied.");
                              }
                          } else {
                              debugln!("[ELF]       - ERROR: Failed to translate target_virt {:#x} for relocation!", target_virt);
@@ -279,7 +250,6 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64) -> Result<u64, alloc::string
     let entry_point = elf.header.e_entry + load_base;
     debugln!("[ELF] Load_elf completed. Entry point: {:#x}", entry_point);
     
-    // DEBUG: Inspect code at entry point
     unsafe {
         if let Some(phys) = virt_to_phys(target_pml4_phys, entry_point) {
              let code_ptr = phys as *const u8;

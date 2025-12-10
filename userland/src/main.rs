@@ -31,13 +31,11 @@ pub extern "C" fn _start() -> ! {
     
     let buffer = unsafe { core::slice::from_raw_parts_mut(buffer_ptr as *mut u32, width * height) };
 
-    // Fill buffer with blue color
     let blue = Color::rgb(0, 0, 255).to_u32();
     for pixel in buffer.iter_mut() {
         *pixel = blue;
     }
 
-    // Draw a red square in the middle
     let red = Color::rgb(255, 0, 0).to_u32();
     let square_size = 50;
     let start_x = (width - square_size) / 2;
@@ -58,7 +56,6 @@ pub extern "C" fn _start() -> ! {
     
     println!("Window created with ID: {}", window_id);
 
-    // Initial draw 
     update_window(&window);
 
     println!("Entering event loop...");

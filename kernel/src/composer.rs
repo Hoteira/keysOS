@@ -397,20 +397,21 @@ impl DisplayServer {
     pub fn write_pixel(&self, row: u32, col: u32, color: Color) {
         if col < self.width as u32 && row < self.height as u32 {
             unsafe {
+                let offset = (row as u64 * self.pitch + col as u64 * (self.depth as u64 / 8)) as usize;
                 match self.depth {
                     16 => {
-                        *((self.framebuffer as *mut u16).add((row * self.width as u32 + col) as usize)) = color.to_u16();
+                        *((self.framebuffer as *mut u8).add(offset) as *mut u16) = color.to_u16();
                     },
 
                     24 => {
                         let color = color.to_u24();
-                        *((self.framebuffer as *mut u8).add(((row * self.width as u32 + col) * 3 + 0) as usize)) = color[0];
-                        *((self.framebuffer as *mut u8).add(((row * self.width as u32 + col) * 3 + 1) as usize)) = color[1];
-                        *((self.framebuffer as *mut u8).add(((row * self.width as u32 + col) * 3 + 2) as usize)) = color[2];
+                        *((self.framebuffer as *mut u8).add(offset)) = color[0];
+                        *((self.framebuffer as *mut u8).add(offset + 1)) = color[1];
+                        *((self.framebuffer as *mut u8).add(offset + 2)) = color[2];
                     }
 
                     32 => {
-                        *((self.framebuffer as *mut u32).add((row * self.width as u32 + col) as usize)) = color.to_u32();
+                        *((self.framebuffer as *mut u8).add(offset) as *mut u32) = color.to_u32();
                     }
 
                     _ => {}

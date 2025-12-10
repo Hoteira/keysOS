@@ -27,7 +27,6 @@ pub struct Superblock {
     pub rev_level: u32,
     pub def_resuid: u16,
     pub def_resgid: u16,
-    // ... extended fields omitted for now
 }
 
 #[repr(C, packed)]
@@ -58,7 +57,7 @@ pub struct Inode {
     pub blocks: u32,
     pub flags: u32,
     pub osd1: u32,
-    pub block: [u32; 15], // Pointers to data blocks
+    pub block: [u32; 15], 
     pub generation: u32,
     pub file_acl: u32,
     pub dir_acl: u32,
@@ -74,4 +73,3 @@ pub struct DirectoryEntry {
     pub name_len: u8,
     pub file_type: u8,
 }
-// Name follows immediately

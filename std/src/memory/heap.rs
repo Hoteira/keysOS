@@ -9,13 +9,13 @@ const MAGIC_USED: u32 = 0xDEAD_BEEF;
 #[repr(C, align(8))]
 pub struct Free {
     next: *mut Free,
-    size: usize,  // Size of free space (excluding header)
+    size: usize,
 }
 
 #[repr(C, align(8))]
 struct Used {
     magic: u32,
-    size: usize,  // Size of payload (excluding header)
+    size: usize,
 }
 
 impl Free {

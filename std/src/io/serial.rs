@@ -24,6 +24,5 @@ macro_rules! println {
 pub fn _print(args: fmt::Arguments) {
     use core::fmt::Write;
     let mut writer = SyscallWriter;
-    // write_fmt calls write_str for each piece of the formatted string
     let _ = writer.write_fmt(args);
 }

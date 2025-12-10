@@ -12,287 +12,301 @@ pub enum FrameError {
     IndexOutOfBounds,
 }
 
-pub struct BitmapPmm {
-    bitmap: *mut u8,
-    total_frames: usize,
-    used_frames: usize,
-    bitmap_size: usize,
+#[derive(Debug, Clone, Copy)]
+pub struct FrameAllocation {
+    pub pid: u64,
+    pub start: u64,
+    pub count: usize,
+    pub used: bool,
+}
+
+const MAX_ALLOCS: usize = 512;
+
+pub struct StructPmm {
+    allocations: [FrameAllocation; MAX_ALLOCS],
+    total_ram: u64,
     lock: AtomicBool,
 }
 
-static mut PMM: BitmapPmm = BitmapPmm {
-    bitmap: 0 as *mut u8,
-    total_frames: 0,
-    used_frames: 0,
-    bitmap_size: 0,
+static mut PMM: StructPmm = StructPmm {
+    allocations: [FrameAllocation { pid: 0, start: 0, count: 0, used: false }; MAX_ALLOCS],
+    total_ram: 0,
     lock: AtomicBool::new(false),
 };
 
 pub fn init() {
     unsafe {
-        debugln!("[PMM] Starting initialization...");
+        debugln!("[PMM] Init (Struct-based)...");
         
-        // Access BOOT_INFO safely
-        let mmap = &(*(&raw mut BOOT_INFO)).mmap;
+        let mmap = (*(&raw mut BOOT_INFO)).mmap;
         
-        // 1. Calculate total memory size
         let mut max_addr: u64 = 0;
-        
         for i in 0..32 {
             let entry = mmap.entries[i];
-            if entry.length == 0 { continue; }
             
-            let end = entry.base + entry.length;
-            if end > max_addr {
-                max_addr = end;
+            if entry.length > 0 {
+                let end = entry.base + entry.length;
+                if end > max_addr { max_addr = end; }
             }
         }
         
-        if max_addr == 0 {
-            debugln!("[PMM] Error: No memory found in map.");
-            return;
-        }
-
-        let total_frames = (max_addr / PAGE_SIZE) as usize;
-        let bitmap_size = (total_frames + 7) / 8;
-
-        debugln!("[PMM] Total Frames: {}, Bitmap Size: {} bytes", total_frames, bitmap_size);
-
-        // 2. Find a place for the bitmap
-        // We explicitly look for memory ABOVE 10MB (0xA00000) to avoid:
-        // - The first 1MB (BIOS/VGA)
-        // - The Kernel (loaded somewhere low)
-        // - The Hardcoded Heap (0x300000 - 0x400000)
-        let safe_threshold = 0xA00000;
-        let mut bitmap_addr: u64 = 0;
-        let mut found = false;
-
-        for i in 0..32 {
-            let entry = mmap.entries[i];
-            if entry.memory_type == 1 {
-                let mut candidate_base = entry.base;
-                if candidate_base < safe_threshold {
-                    if entry.base + entry.length > safe_threshold {
-                        candidate_base = safe_threshold;
-                    } else {
-                        continue;
-                    }
-                }
-
-                if candidate_base % PAGE_SIZE != 0 {
-                    candidate_base = (candidate_base + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
-                }
-
-                let block_end = entry.base + entry.length;
-                if candidate_base + (bitmap_size as u64) <= block_end {
-                    bitmap_addr = candidate_base;
-                    found = true;
-                    break;
-                }
-            }
-        }
-
-        if !found {
-            panic!("PMM: Could not find safe memory (above 4MB) for bitmap!");
-        }
-        
-        debugln!("[PMM] Bitmap placed at {:#x}", bitmap_addr);
-
         let pmm_ptr = &raw mut PMM;
-        (*pmm_ptr).bitmap = bitmap_addr as *mut u8;
-        (*pmm_ptr).total_frames = total_frames;
-        (*pmm_ptr).bitmap_size = bitmap_size;
-        (*pmm_ptr).used_frames = total_frames; 
+        (*pmm_ptr).total_ram = max_addr;
+        debugln!("[PMM] Total RAM: {:#x}", max_addr);
 
-        // 3. Clear bitmap (mark all used initially)
-        // This write is critical. If bitmap_addr is not mapped, we crash here.
-        core::ptr::write_bytes((*pmm_ptr).bitmap, 0xFF, bitmap_size);
+        let pages = (0xA00000 / PAGE_SIZE) as usize;
+        add_allocation(0, 0, pages);
+        
+        debugln!("[PMM] Reserved 0-10MB.");
+    }
+}
 
-        // 4. Iterate mmap and free usable regions
-        debugln!("[PMM] Before mmap processing: is_bit_set(0x0/4096) = {}", is_bit_set(0x0));
-        debugln!("[PMM] Before mmap processing: is_bit_set(0x4000/4096) = {}", is_bit_set(0x4000 / PAGE_SIZE as usize));
-        for i in 0..32 {
-            let entry = mmap.entries[i];
-            if entry.memory_type == 1 { // Usable
-                let start_frame = entry.base / PAGE_SIZE;
-                let num_frames = entry.length / PAGE_SIZE;
-                
-                for f in 0..num_frames {
-                    let frame_idx = (start_frame + f) as usize;
-                    if frame_idx < total_frames {
-                        if is_bit_set(frame_idx) {
-                            unset_bit(frame_idx);
-                            (*pmm_ptr).used_frames -= 1;
-                        }
-                    }
-                }
+unsafe fn add_allocation(pid: u64, start: u64, count: usize) -> bool {
+    let pmm_ptr = &raw mut PMM;
+    
+    // Check for free slot
+    let mut count_used = 0;
+    for i in 0..MAX_ALLOCS {
+        if (*pmm_ptr).allocations[i].used {
+            count_used += 1;
+        }
+    }
+    
+    if count_used >= MAX_ALLOCS {
+        return false;
+    }
+
+    // Find insertion index to keep sorted by start address
+    let mut idx = 0;
+    while idx < count_used {
+        if (*pmm_ptr).allocations[idx].start > start {
+            break;
+        }
+        idx += 1;
+    }
+    
+    // Shift elements right
+    if idx < count_used {
+        for i in (idx..count_used).rev() {
+            (*pmm_ptr).allocations[i+1] = (*pmm_ptr).allocations[i];
+        }
+    }
+    
+    (*pmm_ptr).allocations[idx] = FrameAllocation {
+        pid,
+        start,
+        count,
+        used: true,
+    };
+    
+    true
+}
+
+unsafe fn remove_allocation(start: u64) {
+    let pmm_ptr = &raw mut PMM;
+    let mut found_idx = MAX_ALLOCS;
+    let mut count_used = 0;
+    
+    for i in 0..MAX_ALLOCS {
+        if (*pmm_ptr).allocations[i].used {
+            count_used += 1;
+            if (*pmm_ptr).allocations[i].start == start {
+                found_idx = i;
+            }
+        } else {
+            break; 
+        }
+    }
+
+    if found_idx != MAX_ALLOCS {
+        // Shift left
+        for i in found_idx..(count_used - 1) {
+            (*pmm_ptr).allocations[i] = (*pmm_ptr).allocations[i+1];
+        }
+        (*pmm_ptr).allocations[count_used - 1].used = false;
+    }
+}
+
+unsafe fn is_overlap(start: u64, count: usize) -> bool {
+    let end = start + (count as u64 * PAGE_SIZE);
+    let pmm_ptr = &raw mut PMM;
+    
+    for i in 0..MAX_ALLOCS {
+        let alloc = &(*pmm_ptr).allocations[i];
+        if alloc.used {
+            let alloc_end = alloc.start + (alloc.count as u64 * PAGE_SIZE);
+            if start < alloc_end && end > alloc.start {
+                return true;
+            }
+        } else {
+            break; // Since sorted and packed
+        }
+    }
+    false
+}
+
+unsafe fn is_valid_ram(start: u64, count: usize) -> bool {
+    let end = start + (count as u64 * PAGE_SIZE);
+    let mmap = (*(&raw mut BOOT_INFO)).mmap;
+
+    for i in 0..32 {
+        let entry = mmap.entries[i];
+        if entry.memory_type == 1 && entry.length > 0 {
+            let entry_end = entry.base + entry.length;
+            if start >= entry.base && end <= entry_end {
+                return true;
             }
         }
-        debugln!("[PMM] After mmap processing: is_bit_set(0x4000/4096) = {}", is_bit_set(0x4000 / PAGE_SIZE as usize));
-
-        // 5. Mark the bitmap memory itself as used
-        let bitmap_start_frame = bitmap_addr / PAGE_SIZE;
-        let bitmap_frames = (bitmap_size as u64 + PAGE_SIZE - 1) / PAGE_SIZE;
-        
-        for f in 0..bitmap_frames {
-            let frame_idx = (bitmap_start_frame + f) as usize;
-            if frame_idx < total_frames {
-                if !is_bit_set(frame_idx) {
-                    set_bit(frame_idx);
-                    (*pmm_ptr).used_frames += 1;
-                }
-            }
-        }
-        debugln!("[PMM] After bitmap marking: is_bit_set(0x4000/4096) = {}", is_bit_set(0x4000 / PAGE_SIZE as usize));
-
-        // 6. Mark 0-4MB as used (Legacy + Kernel + Heap)
-        // Safe threshold is where we put the bitmap. We want to reserve everything below it.
-        let frames_reserved = safe_threshold / PAGE_SIZE; 
-        debugln!("[PMM] Marking 0-{}MB as used. frames_reserved={}", safe_threshold / 1024 / 1024, frames_reserved);
-        
-        for f in 0..frames_reserved { 
-             /*
-             if f % 500 == 0 {
-                 debugln!("[PMM] Marking frame {}", f);
-             }
-             */
-             
-             if f < total_frames as u64 {
-                 if !is_bit_set(f as usize) {
-                    set_bit(f as usize);
-                    (*pmm_ptr).used_frames += 1;
-                 }
-             }
-        }
-        
-        debugln!("[PMM] After 0-4MB marking.");
-
-        debugln!("[PMM] Initialized. Used: {} KB, Free: {} KB", 
-            ((*pmm_ptr).used_frames * 4), 
-            (total_frames - (*pmm_ptr).used_frames) * 4
-        );    }
-}
-// Minimum frame index from which user physical memory can be allocated.
-// This is based on the safe_threshold used in pmm::init (0xA00000 = 10MB).
-const MIN_ALLOC_FRAME_IDX: usize = (0xA00000 / PAGE_SIZE) as usize;
-
-unsafe fn set_bit(idx: usize) {
-    let byte_idx = idx / 8;
-    let bit_idx = idx % 8;
-    let pmm_ptr = &raw mut PMM;
-    let ptr = unsafe { (*pmm_ptr).bitmap.add(byte_idx) };
-    unsafe { *ptr |= 1 << bit_idx };
-}
-
-unsafe fn unset_bit(idx: usize) {
-    let byte_idx = idx / 8;
-    let bit_idx = idx % 8;
-    let pmm_ptr = &raw mut PMM;
-    let ptr = unsafe { (*pmm_ptr).bitmap.add(byte_idx) };
-    unsafe { *ptr &= !(1 << bit_idx) };
-}
-
-unsafe fn is_bit_set(idx: usize) -> bool {
-    let byte_idx = idx / 8;
-    let bit_idx = idx % 8;
-    let pmm_ptr = &raw mut PMM;
-    let ptr = unsafe { (*pmm_ptr).bitmap.add(byte_idx) };
-    unsafe { (*ptr & (1 << bit_idx)) != 0 }
+    }
+    false
 }
 
 unsafe fn lock_pmm() {
     let pmm_ptr = &raw mut PMM;
-    while unsafe { (*pmm_ptr).lock.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() } {
+    while (*pmm_ptr).lock.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
         core::hint::spin_loop();
     }
 }
 
 unsafe fn unlock_pmm() {
     let pmm_ptr = &raw mut PMM;
-    unsafe { (*pmm_ptr).lock.store(false, Ordering::Release) };
+    (*pmm_ptr).lock.store(false, Ordering::Release);
 }
+
+// --- Public API ---
 
 pub fn allocate_frame() -> Option<u64> {
     allocate_frames(1)
 }
 
 pub fn allocate_frames(count: usize) -> Option<u64> {
+    allocate_memory(count * PAGE_SIZE as usize)
+}
+
+pub fn allocate_memory(bytes: usize) -> Option<u64> {
+    let pages = (bytes + PAGE_SIZE as usize - 1) / PAGE_SIZE as usize;
+    if pages == 0 { return None; }
+
     unsafe {
         lock_pmm();
         let pmm_ptr = &raw mut PMM;
         
-        if (*pmm_ptr).total_frames < count {
-            unlock_pmm();
-            return None;
+        let mut count_used = 0;
+        for i in 0..MAX_ALLOCS {
+            if (*pmm_ptr).allocations[i].used {
+                count_used += 1;
+            } else {
+                break;
+            }
         }
 
-        // Start searching for free frames from MIN_ALLOC_FRAME_IDX
-        for i in MIN_ALLOC_FRAME_IDX..((*pmm_ptr).total_frames - count + 1) {
-            let mut all_free = true;
-            for j in 0..count {
-                if is_bit_set(i + j) {
-                    all_free = false;
-                    break;
+        let mut found_addr = 0;
+        let mut found = false;
+
+        // 1. Check gap before first allocation (starting from 10MB safe threshold)
+        // Note: init() reserves 0-10MB, so allocations[0] should cover 0-10MB.
+        // We look for gaps AFTER allocations[0].
+        // Or if allocation[0] is missing (impossible after init), use 10MB.
+        
+        // Iterate through sorted allocations to find a gap
+        // If allocations are: [0-10MB], [20-30MB], ...
+        // Gap 1: 10MB to 20MB.
+        
+        let mut prev_end = 0;
+        
+        if count_used > 0 {
+            prev_end = (*pmm_ptr).allocations[0].start + ((*pmm_ptr).allocations[0].count as u64 * PAGE_SIZE);
+        } else {
+            // Should not happen if init called, but fallback
+            prev_end = 0xA00000;
+        }
+
+        // Optimization: if prev_end < 10MB, force it to 10MB (safety)
+        if prev_end < 0xA00000 {
+            prev_end = 0xA00000;
+        }
+
+        // Try to fit between allocations
+        for i in 0..count_used {
+            // Gap is between prev_end and current.start
+            let current = (*pmm_ptr).allocations[i];
+            
+            if current.start > prev_end {
+                let gap_size = current.start - prev_end;
+                if gap_size >= (pages as u64 * PAGE_SIZE) {
+                    // Found gap
+                    if is_valid_ram(prev_end, pages) {
+                        found_addr = prev_end;
+                        found = true;
+                        break;
+                    }
                 }
             }
+            
+            let current_end = current.start + (current.count as u64 * PAGE_SIZE);
+            if current_end > prev_end {
+                prev_end = current_end;
+            }
+        }
 
-            if all_free {
-                for j in 0..count {
-                    set_bit(i + j);
+        // Check after last allocation if not found
+        if !found {
+            if prev_end + (pages as u64 * PAGE_SIZE) <= (*pmm_ptr).total_ram {
+                if is_valid_ram(prev_end, pages) {
+                    found_addr = prev_end;
+                    found = true;
                 }
-                (*pmm_ptr).used_frames += count;
+            }
+        }
+
+        if found {
+            if add_allocation(0, found_addr, pages) {
                 unlock_pmm();
-                return Some(i as u64 * PAGE_SIZE);
+                return Some(found_addr);
             }
         }
+        
         unlock_pmm();
         None
     }
 }
 
 pub fn reserve_frame(addr: u64) -> bool {
-    let frame_idx = (addr / PAGE_SIZE) as usize;
     unsafe {
         lock_pmm();
-        let pmm_ptr = &raw mut PMM;
-        if frame_idx >= (*pmm_ptr).total_frames {
+        if is_overlap(addr, 1) {
             unlock_pmm();
             return false;
         }
-        
-        if is_bit_set(frame_idx) {
-            unlock_pmm();
-            return false; // Already allocated
-        }
-        
-        set_bit(frame_idx);
-        (*pmm_ptr).used_frames += 1;
+        let res = add_allocation(0, addr, 1);
         unlock_pmm();
-        true
+        res
     }
 }
 
 pub fn free_frame(addr: u64) {
-    let frame_idx = (addr / PAGE_SIZE) as usize;
     unsafe {
         lock_pmm();
-        let pmm_ptr = &raw mut PMM;
-        if frame_idx < (*pmm_ptr).total_frames {
-            if is_bit_set(frame_idx) {
-                 unset_bit(frame_idx);
-                 (*pmm_ptr).used_frames -= 1;
-            }
-        }
+        remove_allocation(addr);
         unlock_pmm();
     }
 }
 
 #[allow(dead_code)]
 pub fn get_used_memory() -> usize {
-    unsafe { (*(&raw mut PMM)).used_frames * PAGE_SIZE as usize }
+    unsafe {
+        let pmm_ptr = &raw mut PMM;
+        let mut total = 0;
+        for i in 0..MAX_ALLOCS {
+            if (*pmm_ptr).allocations[i].used {
+                total += (*pmm_ptr).allocations[i].count;
+            }
+        }
+        total * PAGE_SIZE as usize
+    }
 }
 
 #[allow(dead_code)]
 pub fn get_total_memory() -> usize {
-    unsafe { (*(&raw mut PMM)).total_frames * PAGE_SIZE as usize }
+    unsafe { (*(&raw mut PMM)).total_ram as usize }
 }

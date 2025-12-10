@@ -8,7 +8,7 @@ use crate::debugln;
 use crate::fs::disk;
 use crate::fs::ext2::structs::{Superblock, BlockGroupDescriptor, Inode};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Ext2 {
     disk_id: u8,
     base_lba: u64,
@@ -22,7 +22,6 @@ impl Ext2 {
         let mut superblock = unsafe { core::mem::zeroed::<Superblock>() };
         let mut buf = [0u8; 1024];
         
-        // Superblock is always at byte offset 1024 from the start of the volume.
         disk::read(base_lba + 2, disk_id, &mut buf[0..512]);
         disk::read(base_lba + 3, disk_id, &mut buf[512..1024]);
         
@@ -45,13 +44,11 @@ impl Ext2 {
         }))
     }
 
-    // Helper: Reads bytes from disk at a specific byte offset (relative to volume start)
     fn read_disk_data(&self, offset: u64, buffer: &mut [u8]) {
         let abs_offset = offset + (self.base_lba * 512);
         let start_lba = abs_offset / 512;
         let offset_in_sector = (abs_offset % 512) as usize;
         
-        // We might need to read multiple sectors
         let mut current_lba = start_lba;
         let mut bytes_read = 0;
         let total_bytes = buffer.len();
@@ -72,9 +69,6 @@ impl Ext2 {
     }
 
     pub fn read_block_group_descriptor(&self, group_idx: u32) -> BlockGroupDescriptor {
-        // BGDT starts immediately after the Superblock.
-        // If block_size == 1024, Superblock is in block 1. BGDT starts at block 2.
-        // If block_size > 1024, Superblock is inside block 0. BGDT starts at block 1.
         let bgdt_start_block = if self.block_size == 1024 { 2 } else { 1 };
         let desc_size = size_of::<BlockGroupDescriptor>() as u64;
         
@@ -90,25 +84,14 @@ impl Ext2 {
 
     pub fn read_inode(&self, inode_idx: u32) -> Inode {
         debugln!("DEBUG: read_inode({})", inode_idx);
-        // Inode indices are 1-based
         let group = (inode_idx - 1) / self.inodes_per_group;
         let index_in_group = (inode_idx - 1) % self.inodes_per_group;
         
         let bg_desc = self.read_block_group_descriptor(group);
         
-        // Locate Inode Table
         let inode_table_offset = bg_desc.inode_table as u64 * self.block_size;
         
-        // Inode size is in superblock (rev >= 1) or 128 (rev 0)
         let inode_size = if self.superblock.rev_level >= 1 {
-            // self.superblock.inode_size as u64 // Need to add this field to struct if missing
-            // For now assume standard 128 or read from offset 88 in superblock if needed
-            // Struct def doesn't have it yet? Assuming 128 for simplicity or update struct
-            // Actually, standard ext2 often has 128 even in rev 1 unless specified.
-            // But `mke2fs` defaults to 256 sometimes now.
-            // Let's HARDCODE 128 for now or check struct.
-            // Looking at previous structs.rs, `rev_level` is there. `inode_size` is NOT.
-            // Let's assume 128.
             128 
         } else {
             128
@@ -124,24 +107,20 @@ impl Ext2 {
         inode
     }
 
-    // Resolves a logical file block (0, 1, 2...) to a physical disk block address
     pub fn get_block_address(&self, inode: &Inode, logical_block: u32) -> u32 {
-        let ptrs_per_block = self.block_size / 4; // 4 bytes per u32 pointer
+        let ptrs_per_block = self.block_size / 4; 
 
-        // Direct Blocks (0-11)
         if logical_block < 12 {
             return inode.block[logical_block as usize];
         }
 
         let mut indirect_idx = logical_block - 12;
 
-        // Singly Indirect (12)
         if indirect_idx < ptrs_per_block as u32 {
             return self.read_indirect_pointer(inode.block[12], indirect_idx);
         }
         indirect_idx -= ptrs_per_block as u32;
 
-        // Doubly Indirect (13)
         if indirect_idx < (ptrs_per_block * ptrs_per_block) as u32 {
             let first_idx = indirect_idx / ptrs_per_block as u32;
             let second_idx = indirect_idx % ptrs_per_block as u32;
@@ -151,9 +130,7 @@ impl Ext2 {
         }
         indirect_idx -= (ptrs_per_block * ptrs_per_block) as u32;
 
-        // Triply Indirect (14)
         let _p3 = ptrs_per_block * ptrs_per_block * ptrs_per_block;
-        // Implementation logic similar to above...
         let first_idx = indirect_idx / (ptrs_per_block * ptrs_per_block) as u32;
         let rem = indirect_idx % (ptrs_per_block * ptrs_per_block) as u32;
         let second_idx = rem / ptrs_per_block as u32;
@@ -166,7 +143,6 @@ impl Ext2 {
         return self.read_indirect_pointer(second_block, third_idx);
     }
 
-    // Helper to read a u32 pointer from a block
     fn read_indirect_pointer(&self, block_addr: u32, offset: u32) -> u32 {
         if block_addr == 0 { return 0; }
         
@@ -189,7 +165,7 @@ pub struct Ext2Node {
 
 impl FileSystem for Ext2 {
     fn root(&mut self) -> Result<Box<dyn VfsNode>, String> {
-        let inode = self.read_inode(2); // Root is inode 2
+        let inode = self.read_inode(2); 
         Ok(Box::new(Ext2Node {
             fs: self as *mut _,
             inode_idx: 2,
@@ -231,7 +207,6 @@ impl VfsNode for Ext2Node {
             
             debugln!("DEBUG: Logical Block {}, Block Offset {}", block_idx, block_offset);
 
-            // Use get_block_address to handle indirect blocks
             let physical_block = fs.get_block_address(&self.inode, block_idx);
             
             debugln!("DEBUG: Physical Block {}", physical_block);
@@ -241,7 +216,6 @@ impl VfsNode for Ext2Node {
             if physical_block != 0 {
                 fs.read_disk_data(physical_block as u64 * fs.block_size, &mut block_buf);
             } else {
-                // Sparse block, already zeroed
             }
             
             let available = fs.block_size as usize - block_offset;
@@ -274,17 +248,16 @@ impl VfsNode for Ext2Node {
         
         let mut offset = 0;
         while offset < buf.len() {
-            // Ensure we don't read past buffer
             if offset + size_of::<DirectoryEntry>() > buf.len() { break; }
 
             let ptr = unsafe { buf.as_ptr().add(offset) };
             let entry = unsafe { &*(ptr as *const DirectoryEntry) };
             
-            if entry.rec_len == 0 { break; } // Corrupt or end?
+            if entry.rec_len == 0 { break; } 
 
             if entry.inode != 0 {
                 let name_len = entry.name_len as usize;
-                let name_ptr = unsafe { ptr.add(8) }; // Struct size is 8
+                let name_ptr = unsafe { ptr.add(8) }; 
                 
                 if offset + 8 + name_len > buf.len() { break; }
 

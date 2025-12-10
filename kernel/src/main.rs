@@ -57,109 +57,48 @@ pub extern "C" fn _start(bootinfo_ptr: *const BootInfo) -> ! {
 
     debugln!("[KERNEL] Setting initial TSS for user tasks");
 
-        let first_user_task = interrupts::task::TASK_MANAGER.lock()
-
-            .tasks.iter()
-
-            .find(|t| t.state == interrupts::task::TaskState::Ready && t.kernel_stack != 0)
-
-            .map(|t| t.kernel_stack);
+    let first_user_task = interrupts::task::TASK_MANAGER.lock()
+        .tasks.iter()
+        .find(|t| t.state == interrupts::task::TaskState::Ready && t.kernel_stack != 0)
+        .map(|t| t.kernel_stack);
 
     
 
-        if let Some(kstack) = first_user_task {
+    if let Some(kstack) = first_user_task {
+        tss::set_tss(kstack);
+        debugln!("[KERNEL] TSS RSP0 set to {:#x}", kstack);
+    }
 
-            tss::set_tss(kstack);
+    debugln!("[KERNEL] Initializing Ext2...");
 
-            debugln!("[KERNEL] TSS RSP0 set to {:#x}", kstack);
+    match Ext2::new(0xE0, 16384) {
+        Ok(fs) => {
+            debugln!("[EXT2] Superblock found!");
+            debugln!(" - Magic: {:#x}", fs.superblock.magic + 0);
 
-        }
+            crate::fs::vfs::mount(0xE0, fs);
 
-        
-
-        debugln!("[KERNEL] Initializing Ext2...");
-
-    
-
-        match Ext2::new(0, 16384) {
-
-            Ok(mut fs) => {
-
-                debugln!("[EXT2] Superblock found!");
-
-                debugln!(" - Magic: {:#x}", fs.superblock.magic + 0);
-
-                
-
-                match fs.root() {
-
-                    Ok(mut root) => {
-
-                         match root.find("user") {
-
-                             Ok(mut user_file) => {
-
-                                 let file_size = user_file.size();
-
-                                 debugln!("[ELF] User file size: {} bytes", file_size);
-
-                                 let mut elf_buf = alloc::vec![0u8; file_size as usize];
-
-                                 if let Ok(bytes) = user_file.read(0, &mut elf_buf) {
-
-                                     debugln!("[ELF] Read {} bytes from disk.", bytes);
-
-                                     if bytes != file_size as usize {
-
-                                         debugln!("[ELF] WARNING: Read bytes mismatch file size!");
-
-                                     }
-
-                                     
-
-                                     unsafe {
-
-                                         let user_pml4 = memory::vmm::new_user_pml4();
-
-                                         match crate::fs::elf::load_elf(&elf_buf[0..bytes], user_pml4) {
-
-                                             Ok(entry_point) => {
-
-                                                 debugln!("[ELF] Loaded user program. Entry: {:#x}", entry_point);
-
-                                                 interrupts::task::TASK_MANAGER.lock().add_user_task(entry_point, user_pml4, None);
-
-                                             }
-
-                                             Err(e) => debugln!("[ELF] Load failed: {}", e),
-
-                                         }
-
-                                     }
-
-                                 }
-
-                             }
-
-                             Err(e) => debugln!("[EXT2] Failed to find user binary: {}", e),
-
+            let mut elf_buf = alloc::vec![0u8; 1024 * 1024]; // 1MB buffer
+            if let Ok(bytes) = crate::fs::vfs::read("@0xE0/user", 0, elf_buf.len() as u64, elf_buf.as_mut_ptr()) {
+                 debugln!("[ELF] Read {} bytes via VFS.", bytes);
+                 unsafe {
+                     let user_pml4 = memory::vmm::new_user_pml4();
+                     match crate::fs::elf::load_elf(&elf_buf[0..bytes], user_pml4) {
+                         Ok(entry_point) => {
+                             debugln!("[ELF] Loaded. Entry: {:#x}", entry_point);
+                             interrupts::task::TASK_MANAGER.lock().add_user_task(entry_point, user_pml4, None);
                          }
-
-                    }
-
-                    Err(e) => debugln!("[EXT2] Root error: {}", e),
-
-                }
-
+                         Err(e) => debugln!("[ELF] Load failed: {}", e),
+                     }
+                 }
+            } else {
+                debugln!("[VFS] Failed to read @0xE0/user");
             }
-
-            Err(e) => debugln!("[EXT2] Failed to mount Disk 0 @ 16384: {}", e),
-
         }
+        Err(e) => debugln!("[EXT2] Failed to mount: {}", e),
+    }
 
-    
-
-        debugln!("[KERNEL] Starting Kernel Tasks...");
+    debugln!("[KERNEL] Starting Kernel Tasks...");
 
     load_idt();
     debugln!("[KERNEL] IDT loaded.");

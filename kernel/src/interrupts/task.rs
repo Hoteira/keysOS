@@ -3,7 +3,7 @@ use crate::debugln;
 use crate::memory::{paging, pmm, vmm};
 
 #[allow(dead_code)]
-const STACK_SIZE: u64 = 64 * 1024; // 64KB
+const STACK_SIZE: u64 = 64 * 1024;
 const MAX_TASKS: usize = 125;
 
 use alloc::vec::Vec;
@@ -17,46 +17,7 @@ pub struct Task {
     pub cpu_state_ptr: u64,
     pub state: TaskState,
     pub pml4_phys: u64,
-    // We can't derive Copy/Clone if we have Vec/Box.
-    // Task must be non-copy now? 
-    // But `MAX_TASKS` array requires Copy/Clone initialization?
-    // `[NULL_TASK; MAX_TASKS]` requires Copy.
-    // We might need to change `tasks` array or `Task` definition.
-    // Or use a fixed size array for FDs?
-    // Or Wrap Vec in something?
-    // The current TaskManager usage relies on array initialization.
 }
-
-// ...
-// Wait, modifying Task to be non-Copy is a big change.
-// `[NULL_TASK; 125]` works because `Task` is Copy.
-// `Vec` is not Copy.
-// I should probably make `file_descriptors` a fixed array or `Option<Box...>` is not copy either.
-// `Box` is not Copy.
-// I need to change `tasks` to `[Option<Task>; MAX_TASKS]` or similar?
-// Or `Vec<Task>`?
-// `TaskManager` uses `tasks: [Task; MAX_TASKS]`.
-//
-// Alternative: Global FD table? No, per task.
-// Alternative: Fixed array of FDs in Task? `[Option<FileHandle>; 16]`.
-// `FileHandle` contains `Box`. `Box` is unique. Not Copy.
-//
-// So `Task` cannot be Copy.
-// We must change `TaskManager`.
-//
-// `pub tasks: [Option<Task>; MAX_TASKS]`?
-// Then `NULL_TASK` is just `None`.
-//
-// Let's try to keep it simple.
-// Can we use a raw pointer for `FileHandle`?
-// Or make `Task` not Copy and initialize array manually?
-// `const MAX_TASKS: usize = 125;`
-// `tasks: [Task; MAX_TASKS]` -> `tasks: Vec<Task>`?
-// Or `tasks: [Option<Task>; MAX_TASKS]` initialized with `[const { None }; MAX_TASKS]`.
-//
-// Let's change `TaskManager` to use `Vec<Task>` or `[Option<Task>; 125]`.
-// `[Option<Task>; 125]` is easiest if we impl `Default`.
-
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum TaskState {
@@ -65,33 +26,30 @@ pub enum TaskState {
     Zombie,
 }
 
-// Adapted for x86_64
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone)]
 pub struct CPUState {
-    // Pushed by push_all (manual)
-    r15: u64,
-    r14: u64,
-    r13: u64,
-    r12: u64,
-    r11: u64,
+    pub(crate) r15: u64,
+    pub(crate) r14: u64,
+    pub(crate) r13: u64,
+    pub(crate) r12: u64,
+    pub(crate) r11: u64,
     pub(crate) r10: u64,
-    r9: u64,
-    r8: u64,
+    pub(crate) r9: u64,
+    pub(crate) r8: u64,
     pub(crate) rdi: u64,
     pub(crate) rsi: u64,
     pub(crate) rdx: u64,
-    rcx: u64,
-    rbx: u64,
+    pub(crate) rcx: u64,
+    pub(crate) rbx: u64,
     pub(crate) rax: u64,
-    rbp: u64,
+    pub(crate) rbp: u64,
 
-    // Pushed by CPU on interrupt
-    rip: u64,
-    cs: u64,
-    rflags: u64,
-    rsp: u64,
-    ss: u64,
+    pub(crate) rip: u64,
+    pub(crate) cs: u64,
+    pub(crate) rflags: u64,
+    pub(crate) rsp: u64,
+    pub(crate) ss: u64,
 }
 
 static NULL_TASK: Task = Task {
@@ -99,23 +57,19 @@ static NULL_TASK: Task = Task {
     kernel_stack: 0,
     cpu_state_ptr: 0,
     state: TaskState::Null,
-    pml4_phys: 0, // Initialize the new field
+    pml4_phys: 0,
 };
 
 impl Task {
-    // Adapted for 64-bit (u64 args, etc)
     pub fn init(&mut self, entry_point: u64, args: Option<&[u64]>) {
         self.state = TaskState::Ready;
         
-        // Set to Kernel PML4
         unsafe {
              self.pml4_phys = (*(&raw const crate::boot::BOOT_INFO)).pml4;
         }
 
-        // Allocate stack (Kernel Stack for kernel tasks)
         self.stack = pmm::allocate_frame().expect("Task init: OOM");
         
-        // Kernel stack is identity mapped by bootloader (0-4GB), so no mapping needed.
         let stack_top = self.stack + 4096;
         self.kernel_stack = stack_top; 
 
@@ -139,9 +93,9 @@ impl Task {
             (*state_ptr).rbp = 0;
             (*state_ptr).rsp = stack_top; 
             (*state_ptr).rip = entry_point;
-            (*state_ptr).cs = 0x28; // Kernel Code 64-bit
-            (*state_ptr).rflags = 0x202; // Interrupts enabled
-            (*state_ptr).ss = 0x10; // Kernel Data
+            (*state_ptr).cs = 0x28;
+            (*state_ptr).rflags = 0x202;
+            (*state_ptr).ss = 0x10;
         }
     }
 
@@ -149,23 +103,16 @@ impl Task {
     pub fn init_user(&mut self, entry_point: u64, pml4_phys: u64, args: Option<&[u64]>) {
         self.state = TaskState::Ready;
 
-        // Use the provided PML4
         self.pml4_phys = pml4_phys;
 
-        // 1. Allocate Kernel Stack (for TSS RSP0 and context saving)
         let k_frame = pmm::allocate_frame().expect("Task init_user: OOM (kstack)");
-        // We assume k_frame is < 4GB and thus already identity mapped by bootloader
         self.kernel_stack = k_frame + 4096;
 
-        // 2. Allocate User Stack (physical frame)
         let u_frame = pmm::allocate_frame().expect("Task init_user: OOM (ustack)");
         self.stack = u_frame; 
         
-        // Identity map the user stack! No more high virtual addresses.
-        // We assume u_frame is < 4GB and accessible to user (bootloader set User bit).
         let u_stack_top = u_frame + 4096; 
 
-        // 3. Setup CPU State on the KERNEL Stack
         let state_size = core::mem::size_of::<CPUState>();
         let state_ptr = (self.kernel_stack - state_size as u64) as *mut CPUState;
         self.cpu_state_ptr = state_ptr as u64;
@@ -185,12 +132,11 @@ impl Task {
             (*state_ptr).rdi = 0;
             (*state_ptr).rbp = 0;
             
-            // User Context
             (*state_ptr).rip = entry_point; 
-            (*state_ptr).cs = 0x33; // User Code 64 (0x30) | RPL 3
-            (*state_ptr).rflags = 0x202; // Interrupts enabled (No IOPL 3!)
-            (*state_ptr).rsp = u_stack_top; // User Stack (Physical/Identity)
-            (*state_ptr).ss = 0x23; // User Data (0x20) | RPL 3
+            (*state_ptr).cs = 0x33;
+            (*state_ptr).rflags = 0x202;
+            (*state_ptr).rsp = u_stack_top;
+            (*state_ptr).ss = 0x23;
         }
     }
 }
@@ -201,74 +147,18 @@ pub struct TaskManager {
     current_task: isize,
 }
 
-// Using a spinlock for thread safety (even though we are single core, interrupts exist)
 #[allow(dead_code)]
 pub struct LockedTaskManager {
-    inner: spin::Mutex<TaskManager>,
+    inner: std::sync::Mutex<TaskManager>,
 }
 
-// Helper since we don't have the user's mutex lib
-pub mod spin {
-    use core::sync::atomic::{AtomicBool, Ordering};
-    use core::cell::UnsafeCell;
-
-    pub struct Mutex<T> {
-        lock: AtomicBool,
-        data: UnsafeCell<T>,
-    }
-    unsafe impl<T: Send> Sync for Mutex<T> {}
-    unsafe impl<T: Send> Send for Mutex<T> {}
-
-    pub struct MutexGuard<'a, T> {
-        lock: &'a AtomicBool,
-        data: &'a mut T,
-    }
-
-    impl<T> Mutex<T> {
-        pub const fn new(data: T) -> Self {
-            Self {
-                lock: AtomicBool::new(false),
-                data: UnsafeCell::new(data),
-            }
-        }
-        pub fn lock(&self) -> MutexGuard<'_, T> {
-            while self.lock.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
-                core::hint::spin_loop();
-            }
-            MutexGuard {
-                lock: &self.lock,
-                data: unsafe { &mut *self.data.get() },
-            }
-        }
-    }
-
-    impl<'a, T> core::ops::Deref for MutexGuard<'a, T> {
-        type Target = T;
-        fn deref(&self) -> &Self::Target {
-            self.data
-        }
-    }
-    impl<'a, T> core::ops::DerefMut for MutexGuard<'a, T> {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            self.data
-        }
-    }
-    impl<'a, T> Drop for MutexGuard<'a, T> {
-        fn drop(&mut self) {
-            self.lock.store(false, Ordering::Release);
-        }
-    }
-}
-
-pub static TASK_MANAGER: spin::Mutex<TaskManager> =
-    spin::Mutex::new(TaskManager {
+pub static TASK_MANAGER: std::sync::Mutex<TaskManager> =
+    std::sync::Mutex::new(TaskManager {
         tasks: [NULL_TASK; MAX_TASKS],
         task_count: 0,
         current_task: -1,
     });
 
-// Global pointer to the current task's kernel stack (Top of stack).
-// Updated by switch() on every context switch.
 #[unsafe(no_mangle)]
 pub static mut KERNEL_STACK_PTR: u64 = 0;
 
@@ -304,11 +194,7 @@ impl TaskManager {
             if self.tasks[self.current_task as usize].state == TaskState::Zombie {
                 let task = &mut self.tasks[self.current_task as usize];
                 
-                // Clean up stacks
                 let k_frame = task.kernel_stack - 4096;
-                // Check if kernel stack is different from main stack (User Task)
-                // For Kernel Task: stack == k_frame
-                // For User Task: stack != k_frame (stack is user stack)
                 if k_frame != task.stack {
                      pmm::free_frame(k_frame);
                 }
@@ -335,7 +221,6 @@ impl TaskManager {
         let mut i = self.current_task + 1;
         let limit = MAX_TASKS as isize;
         
-        // Simple round-robin
         let start_i = i;
         
         loop {
@@ -349,13 +234,10 @@ impl TaskManager {
             
             i += 1;
             if i == start_i {
-                // Looped all the way around, no tasks ready
-                // Should at least have idle
                 break;
             }
         }
         
-        // Fallback to idle if nothing else is found (usually index 0)
         if self.tasks[0].state == TaskState::Ready {
             0
         } else {
@@ -384,8 +266,6 @@ fn idle() {
 pub extern "C" fn timer_handler() {
     unsafe {
         naked_asm!(
-            // 1. Save all registers (x86_64 calling convention + extras)
-            // The CPU has already pushed SS, RSP, RFLAGS, CS, RIP
             "push rbp",
             "push rax",
             "push rbx",
@@ -402,14 +282,11 @@ pub extern "C" fn timer_handler() {
             "push r14",
             "push r15",
 
-            // 2. Pass the current stack pointer (RSP) as the first argument (RDI) to switch
             "mov rdi, rsp",
             "call switch",
 
-            // 3. The switch function returns the new RSP in RAX
             "mov rsp, rax",
 
-            // 4. Restore registers
             "pop r15",
             "pop r14",
             "pop r13",
@@ -426,7 +303,6 @@ pub extern "C" fn timer_handler() {
             "pop rax",
             "pop rbp",
 
-            // 5. Return using iretq (pops RIP, CS, RFLAGS, RSP, SS)
             "iretq",
         );
     }
@@ -439,25 +315,11 @@ pub extern "C" fn switch(rsp: u64) -> u64 {
         let mut tm = TASK_MANAGER.lock();
         let (new_state, k_stack, _pml4_phys) = tm.schedule(rsp as *mut CPUState);
         
-        // Update TSS RSP0 if the task has a kernel stack (for user->kernel transition)
         if k_stack != 0 {
              crate::tss::set_tss(k_stack);
-             // Update the global kernel stack pointer for syscalls to use
              KERNEL_STACK_PTR = k_stack;
         }
         
-        //debugln!("[Switch] Returning RSP: {:#x}", new_state as u64);
-        
-        // debugln!("[Switch] Switching to task. RIP: {:#x}, RSP: {:#x}, CR3: {:#x}", (*new_state).rip, (*new_state).rsp, pml4_phys);
-
-        /* 
-           CR3 Switching Logic Removed:
-           Since new_user_pml4 currently returns the shared Boot PML4, 
-           switching CR3 is unnecessary and risky if we are executing on a stack 
-           that relies on the current mapping. We assume all tasks share the 
-           same address space for now.
-        */
-
         (*(&raw const crate::interrupts::pic::PICS)).end_interrupt(crate::interrupts::exceptions::TIMER_INT);
 
         new_state as u64

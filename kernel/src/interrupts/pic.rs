@@ -63,41 +63,35 @@ impl Pic {
 
 impl Pics {
     pub fn init(&self) {
-        // Start initialization sequence (ICW1)
         self.master.send_command(0x11);
         wait();
         self.slave.send_command(0x11);
         wait();
 
-        // ICW2: Remap offsets
         self.master.write_data(self.master.offset);
         wait();
         self.slave.write_data(self.slave.offset);
         wait();
 
-        // ICW3: Cascade setup
-        self.master.write_data(4); // Master has slave at IRQ2
+        self.master.write_data(4);
         wait();
-        self.slave.write_data(2);  // Slave identity
+        self.slave.write_data(2);
         wait();
 
-        // ICW4: Environment (8086 mode)
         self.master.write_data(0x01);
         wait();
         self.slave.write_data(0x01);
         wait();
 
-        // OCW1: Mask all interrupts to prevent artifacts/residue
         self.master.write_data(0xFF);
         self.slave.write_data(0xFF);
 
-        // Unmask specific interrupts
-        self.master.unmask_irq(0); // Timer
-        self.master.unmask_irq(1); // Keyboard
-        self.master.unmask_irq(2); // Cascade (Required for Slave PIC)
+        self.master.unmask_irq(0);
+        self.master.unmask_irq(1);
+        self.master.unmask_irq(2);
         
-        self.slave.unmask_irq(3);  // Legacy/User IRQ (IRQ 11)
-        self.slave.unmask_irq(4);  // Mouse (IRQ 12)
+        self.slave.unmask_irq(3);
+        self.slave.unmask_irq(4);
     }
 
     pub fn handles_interrupt(&self, interrupt: u8) -> bool {

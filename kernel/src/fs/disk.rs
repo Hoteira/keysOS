@@ -10,7 +10,6 @@ pub fn read(lba: u64, disk: u8, buffer: &mut [u8]) {
         return;
     }
 
-    // PIO Fallback
     while is_busy() {}
 
     let total_bytes = buffer.len();
@@ -19,9 +18,7 @@ pub fn read(lba: u64, disk: u8, buffer: &mut [u8]) {
     outb(0x3f6, 0b00000010);
 
     outb(0x1F1, 0x00);
-    outb(0x1F2, if sector_count > 255 { 0 } else { sector_count as u8 }); // 0 means 256 sectors, but PIO loop handles it manually
-    // Actually PIO usually does one sector at a time or block? 
-    // The previous code did loop over sectors. Let's do sector by sector to be safe and handle large reads.
+    outb(0x1F2, if sector_count > 255 { 0 } else { sector_count as u8 });
 
     let mut current_lba = lba;
     let mut bytes_read = 0;
@@ -31,7 +28,7 @@ pub fn read(lba: u64, disk: u8, buffer: &mut [u8]) {
         
         while is_busy() {}
 
-        outb(0x1F2, 1); // Read 1 sector
+        outb(0x1F2, 1);
         outb(0x1F3, current_lba as u8);
         outb(0x1F4, (current_lba >> 8) as u8);
         outb(0x1F5, (current_lba >> 16) as u8);
@@ -43,18 +40,16 @@ pub fn read(lba: u64, disk: u8, buffer: &mut [u8]) {
             let word = inw(0x1F0);
             if bytes_remaining > 0 {
                  let current_offset = bytes_read + i * 2;
-                 // Write first byte
                  if current_offset < total_bytes {
                      buffer[current_offset] = (word & 0xFF) as u8;
                  }
-                 // Write second byte
                  if current_offset + 1 < total_bytes {
                      buffer[current_offset + 1] = (word >> 8) as u8;
                  }
             }
         }
         
-        bytes_read += 512; // We consumed a sector from the disk, even if we didn't store all bytes
+        bytes_read += 512;
         current_lba += 1;
     }
 
@@ -68,7 +63,6 @@ pub fn write(lba: u64, disk: u8, buffer: &[u8]) {
         return;
     }
 
-    // PIO Fallback
     let total_bytes = buffer.len();
     let _sector_count = (total_bytes + 511) / 512;
     
@@ -80,12 +74,12 @@ pub fn write(lba: u64, disk: u8, buffer: &[u8]) {
 
         outb(0x3f6, 0b00000010);
         outb(0x1F1, 0x00);
-        outb(0x1F2, 1); // Write 1 sector
+        outb(0x1F2, 1);
         outb(0x1F3, current_lba as u8);
         outb(0x1F4, (current_lba >> 8) as u8);
         outb(0x1F5, (current_lba >> 16) as u8);
         outb(0x1F6, disk | ((current_lba >> 24) & 0x0F) as u8);
-        outb(0x1F7, 0x30); // Write command
+        outb(0x1F7, 0x30);
 
         while is_busy() {}
         while !is_ready() {}
@@ -100,7 +94,6 @@ pub fn write(lba: u64, disk: u8, buffer: &[u8]) {
              if current_offset + 1 < total_bytes {
                  word |= (buffer[current_offset + 1] as u16) << 8;
              }
-             // If beyond bounds, word remains 0 (zero padding)
              
              outw(0x1F0, word);
         }
@@ -110,7 +103,7 @@ pub fn write(lba: u64, disk: u8, buffer: &[u8]) {
     }
 
     reset();
-    outb(0x1F7, 0xE7); // Cache flush?
+    outb(0x1F7, 0xE7);
 }
 
 #[allow(dead_code)]
@@ -166,4 +159,3 @@ pub fn check_disk() -> [bool; 2] {
 
     [master, slave]
 }
-

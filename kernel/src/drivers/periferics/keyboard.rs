@@ -2,7 +2,7 @@
 
 use crate::drivers::port::{inb, outb};
 use alloc::collections::VecDeque;
-use crate::interrupts::task::spin::Mutex;
+use std::sync::Mutex;
 
 #[allow(dead_code)]
 pub static KEYBOARD_BUFFER: Mutex<VecDeque<char>> = Mutex::new(VecDeque::new());
