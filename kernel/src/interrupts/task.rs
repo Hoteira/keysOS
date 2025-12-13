@@ -151,7 +151,8 @@ impl Task {
             (*state_ptr).rip = entry_point; 
             (*state_ptr).cs = 0x33;
             (*state_ptr).rflags = 0x202;
-            (*state_ptr).rsp = u_stack_top;
+            // Subtract 8 to ensure 16-byte alignment after call/push rbp
+            (*state_ptr).rsp = u_stack_top - 8;
             (*state_ptr).ss = 0x23;
         }
     }

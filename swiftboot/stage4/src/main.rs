@@ -7,7 +7,7 @@ use crate::debug::debug;
 mod debug;
 mod disk;
 
-const STACK_ADDR: u64 = 0x200_0000;
+const STACK_ADDR: u64 = 0xA00000;
 
 pub const NEXT_STAGE_LBA: u64 = 6144;
 pub const KERNEL_RAM: u32 = 0x10_0000;

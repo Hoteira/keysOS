@@ -11,8 +11,6 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
-    unsafe { core::arch::asm!("and rsp, -16"); } // Align stack to 16 bytes for SSE
-
     let heap_size = 1024 * 1024;
     let heap_ptr = std::graphics::malloc(heap_size);
     std::memory::heap::init_heap(heap_ptr as *mut u8, heap_size);
