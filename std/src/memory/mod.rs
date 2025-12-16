@@ -1,5 +1,5 @@
 pub mod heap;
-mod mmio;
+pub mod mmio;
 
 use crate::os::syscall;
 

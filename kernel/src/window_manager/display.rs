@@ -1,6 +1,6 @@
 use core::sync::atomic::Ordering;
 use crate::drivers::video::virtio;
-use crate::println;
+use crate::{debugln, println};
 
 pub const DEPTH: u8 = 32;
 
@@ -34,10 +34,9 @@ impl DisplayServer {
         unsafe {
             virtio::init();
             if virtio::queue::VIRT_QUEUES[0].is_some() {
-                // VirtIO is available - use requested resolution
                 self.width = 1280;
                 self.height = 720;
-                self.pitch = self.width * 4; // VirtIO always uses width * 4
+                self.pitch = self.width * 4;
                 self.depth = 32;
 
                 let size_bytes = (self.pitch * self.height) as usize;
@@ -55,46 +54,7 @@ impl DisplayServer {
 
                 virtio::start_gpu(self.width as u32, self.height as u32, self.framebuffer);
 
-                use crate::drivers::periferics::mouse::{CURSOR_BUFFER, CURSOR_WIDTH, CURSOR_HEIGHT};
-
-                // Allocate 4 pages (16KB) for 64x64 cursor to ensure compatibility and alignment
-                // 64 * 64 * 4 bytes = 16384 bytes = 4 pages
-                let cursor_pages = 4;
-                let cursor_phys_addr = crate::memory::pmm::allocate_frames(cursor_pages, 0)
-                    .expect("Failed to allocate cursor buffer");
-
-                let cursor_ptr = cursor_phys_addr as *mut u32;
-                
-                // Zero out the entire 16KB buffer
-                core::ptr::write_bytes(cursor_ptr as *mut u8, 0, cursor_pages * 4096);
-
-                // Copy the 32x32 cursor to the top-left corner
-                // Stride of the new buffer is 64 pixels
-                let new_stride = 64;
-                for y in 0..CURSOR_HEIGHT {
-                    for x in 0..CURSOR_WIDTH {
-                        let src_idx = y * CURSOR_WIDTH + x;
-                        let dst_idx = y * new_stride + x;
-                        *cursor_ptr.add(dst_idx) = CURSOR_BUFFER[src_idx];
-                    }
-                }
-
-                let cursor_ok = virtio::setup_cursor(
-                    64, // Width
-                    64, // Height
-                    cursor_phys_addr as u64,
-                    0,  // hot_x
-                    0   // hot_y
-                );
-
-                if cursor_ok {
-                    println!("DisplayServer: Hardware cursor initialized");
-                    VIRTIO_CURSOR_ACTIVE = true;
-                } else {
-                    println!("DisplayServer: Hardware cursor failed (using software fallback)");
-                    VIRTIO_CURSOR_ACTIVE = false;
-                }
-
+                VIRTIO_CURSOR_ACTIVE = false;
                 VIRTIO_ACTIVE = true;
 
                 println!("DisplayServer: VirtIO GPU active at {}x{}", self.width, self.height);
@@ -109,24 +69,6 @@ impl DisplayServer {
         self.depth = 32;
 
         // Map VBE framebuffer with Write-Combining
-        let fb_phys = vbe.framebuffer as u64;
-        let fb_size = (self.pitch * self.height) as usize;
-        let fb_pages = (fb_size + 4095) / 4096;
-        let fb_virt_base = 0xFFFF_8000_FD00_0000;
-
-        for i in 0..fb_pages {
-            let offset = (i * 4096) as u64;
-            let phys = fb_phys + offset;
-            let virt = fb_virt_base + offset;
-
-            let flags = crate::memory::paging::PAGE_PRESENT |
-                crate::memory::paging::PAGE_WRITABLE |
-                crate::memory::paging::PAGE_PAT;
-
-            crate::memory::vmm::map_page(virt, phys, flags, None);
-        }
-
-        self.framebuffer = fb_virt_base;
 
         let size_bytes = self.pitch as usize * self.height as usize;
         let pages = (size_bytes + 4095) / 4096;
@@ -315,7 +257,7 @@ impl DisplayServer {
     pub fn draw_mouse(&self, x: u16, y: u16, dragging_window: bool) {
         use crate::drivers::periferics::mouse::{CURSOR_BUFFER, CURSOR_WIDTH, CURSOR_HEIGHT};
 
-        let mut temp_buf: [u32; 1024] = [0; 1024];
+        let mut temp_buf: [u32; CURSOR_BUFFER.len()] = [0; CURSOR_BUFFER.len()];
         let pitch_bytes = self.pitch as usize;
         let fb_ptr = self.framebuffer as *mut u8;
         let db_ptr = self.double_buffer as *const u8;
@@ -371,7 +313,7 @@ impl DisplayServer {
             }
 
             if VIRTIO_ACTIVE {
-                virtio::flush(x as u32, y as u32, 32, 32, self.width as u32);
+                virtio::flush(x as u32, y as u32, CURSOR_WIDTH as u32, CURSOR_HEIGHT as u32, self.width as u32);
             }
         }
     }

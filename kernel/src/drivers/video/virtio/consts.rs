@@ -5,6 +5,7 @@ pub const VIRTIO_CAP_ISR: u8 = 3;
 pub const VIRTIO_CAP_DEVICE: u8 = 4;
 pub const VIRTIO_CAP_PCI: u8 = 5;
 
+
 // Common Configuration Field Offsets
 pub const OFF_DEVICE_FEATURE_SELECT: usize = 0x00;
 pub const OFF_DEVICE_FEATURE: usize = 0x04;
@@ -33,6 +34,7 @@ pub const STATUS_FAILED: u8 = 128;
 
 // Feature Bits
 pub const VIRTIO_F_VERSION_1: u64 = 1 << 32;
+pub const VIRTIO_GPU_F_VIRGL: u32 = 1 << 1;
 
 // GPU Command Types
 pub const VIRTIO_GPU_CMD_GET_DISPLAY_INFO: u32 = 0x0100;
