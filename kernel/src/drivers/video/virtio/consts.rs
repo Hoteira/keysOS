@@ -34,7 +34,14 @@ pub const STATUS_FAILED: u8 = 128;
 
 // Feature Bits
 pub const VIRTIO_F_VERSION_1: u64 = 1 << 32;
-pub const VIRTIO_GPU_F_VIRGL: u32 = 1 << 1;
+pub const VIRTIO_GPU_F_VIRGL: u32 = 0;
+pub const VIRTIO_GPU_F_EDID: u32 = 1;
+
+pub const VIRTIO_GPU_FLAG_FENCE: u32 = 1 << 0;
+
+// GPU Formats
+pub const VIRTIO_GPU_FORMAT_B8G8R8A8_UNORM: u32 = 1;
+pub const VIRTIO_GPU_FORMAT_A8R8G8B8_UNORM: u32 = 2;
 
 // GPU Command Types
 pub const VIRTIO_GPU_CMD_GET_DISPLAY_INFO: u32 = 0x0100;

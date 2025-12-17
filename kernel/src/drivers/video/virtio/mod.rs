@@ -1,6 +1,7 @@
 pub mod consts;
 pub mod structs;
 pub mod queue;
+pub mod cursor;
 
 use alloc::vec::Vec;
 use std::memory::mmio::{read_16, read_32, read_8, write_32, write_8};
@@ -50,10 +51,10 @@ pub fn init() {
                  notify_multiplier = virtio.read_capability_data(cap.offset as u8, 16);
 
                  if notify_multiplier == 0 {
-                     notify_multiplier = 0x1000;
+                     notify_multiplier = 4;
                  }
 
-                 debugln!("VirtIO GPU: Notify found at BAR {} offset {:#x} -> Phys {:#x}", cap.bar, cap.offset, notify_base);
+                 debugln!("VirtIO GPU: Notify found at BAR {} offset {:#x} -> Phys {:#x}. Multiplier: {}", cap.bar, cap.offset, notify_base, notify_multiplier);
              }
         }
     }
@@ -62,6 +63,8 @@ pub fn init() {
         debugln!("VirtIO GPU: Could not find Common Config capability.");
         return;
     }
+
+    check_features(common_cfg_ptr);
 
     unsafe {
         write_8(common_cfg_ptr.add(OFF_DEVICE_STATUS), 0);
@@ -88,7 +91,6 @@ pub fn init() {
             debugln!("VirtIO GPU: Negotiating VIRGL");
         }
 
-        const VIRTIO_GPU_F_EDID: u32 = 1 << 1;
         if (device_features_low & (1 << VIRTIO_GPU_F_EDID)) != 0 {
             driver_features_low |= 1 << VIRTIO_GPU_F_EDID;
             debugln!("VirtIO GPU: Negotiating EDID");
@@ -148,7 +150,25 @@ pub fn parse_virtio_caps(pci_device: &PciDevice, caps: &[PciCapability]) -> Vec<
     virtio_caps
 }
 
-pub fn start_gpu(width: u32, height: u32, phys_buffer: u64) {
+fn check_features(common_cfg: *mut u8) {
+    unsafe {
+        debugln!("VirtIO GPU: Checking features...");
+        
+        // Check virGL
+        write_32(common_cfg.add(OFF_DEVICE_FEATURE_SELECT), 0);
+        let features = read_32(common_cfg.add(OFF_DEVICE_FEATURE));
+        let has_virgl = (features & (1 << VIRTIO_GPU_F_VIRGL)) != 0;
+        
+        // Check Hardware Cursor (Queue 1)
+        let num_queues = read_16(common_cfg.add(OFF_NUM_QUEUES));
+        let has_cursor = num_queues > 1;
+
+        debugln!("  - virGL: {}", if has_virgl { "Available" } else { "Unavailable" });
+        debugln!("  - Hardware Cursor: {}", if has_cursor { "Available" } else { "Unavailable" });
+    }
+}
+
+pub fn start_gpu(width: u32, height: u32, phys_buf1: u64, phys_buf2: u64) {
     let req_info = VirtioGpuCtrlHeader {
         type_: VIRTIO_GPU_CMD_GET_DISPLAY_INFO,
         flags: 0,
@@ -161,10 +181,10 @@ pub fn start_gpu(width: u32, height: u32, phys_buffer: u64) {
 
     send_command_queue(
         0,
-        &req_info as *const _ as u64,
-        core::mem::size_of_val(&req_info) as u32,
-        &resp_info as *const _ as u64,
-        core::mem::size_of_val(&resp_info) as u32,
+        &[&req_info as *const _ as u64],
+        &[core::mem::size_of_val(&req_info) as u32],
+        &[&resp_info as *const _ as u64],
+        &[core::mem::size_of_val(&resp_info) as u32],
     );
 
     debugln!("VirtIO GPU: Display Info - Enabled: {}, Flags: {}",
@@ -175,66 +195,75 @@ pub fn start_gpu(width: u32, height: u32, phys_buffer: u64) {
 
     debugln!("VirtIO GPU: Display Info Type: {:#x}", resp_info.hdr.type_);
 
-    let req_create = VirtioGpuResourceCreate2d {
-        hdr: VirtioGpuCtrlHeader {
-            type_: VIRTIO_GPU_CMD_RESOURCE_CREATE_2D,
-            flags: 0,
-            fence_id: 0,
-            ctx_id: 0,
-            ring_idx: 0,
-            padding: [0; 3],
-        },
-        resource_id: 1,
-        format: 1,
-        width,
-        height,
-    };
-    let mut resp_create: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
-
-    send_command_queue(
-        0,
-        &req_create as *const _ as u64,
-        core::mem::size_of_val(&req_create) as u32,
-        &resp_create as *const _ as u64,
-        core::mem::size_of_val(&resp_create) as u32,
-    );
-    debugln!("VirtIO GPU: Create 2D Resp: {:#x}", resp_create.type_);
-
-    #[repr(C)]
-    struct AttachRequest {
-        hdr: VirtioGpuResourceAttachBacking,
-        entry: VirtioGpuMemEntry,
-    }
-
-    let req_attach = AttachRequest {
-        hdr: VirtioGpuResourceAttachBacking {
+    // Helper closure to create and attach a resource
+    let mut create_resource = |id: u32, phys: u64| {
+        let req_create = VirtioGpuResourceCreate2d {
             hdr: VirtioGpuCtrlHeader {
-                type_: VIRTIO_GPU_CMD_RESOURCE_ATTACH_BACKING,
+                type_: VIRTIO_GPU_CMD_RESOURCE_CREATE_2D,
                 flags: 0,
                 fence_id: 0,
                 ctx_id: 0,
                 ring_idx: 0,
                 padding: [0; 3],
             },
-            resource_id: 1,
-            nr_entries: 1,
-        },
-        entry: VirtioGpuMemEntry {
-            addr: phys_buffer,
-            length: width * height * 4,
-            padding: 0,
-        },
+            resource_id: id,
+            format: 1, // B8G8R8A8_UNORM
+            width,
+            height,
+        };
+        let mut resp_create: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
+
+        send_command_queue(
+            0,
+            &[&req_create as *const _ as u64],
+            &[core::mem::size_of_val(&req_create) as u32],
+            &[&resp_create as *const _ as u64],
+            &[core::mem::size_of_val(&resp_create) as u32],
+        );
+        debugln!("VirtIO GPU: Create Resource {} Resp: {:#x}", id, resp_create.type_);
+
+        #[repr(C)]
+        struct AttachRequest {
+            hdr: VirtioGpuResourceAttachBacking,
+            entry: VirtioGpuMemEntry,
+        }
+
+        let req_attach = AttachRequest {
+            hdr: VirtioGpuResourceAttachBacking {
+                hdr: VirtioGpuCtrlHeader {
+                    type_: VIRTIO_GPU_CMD_RESOURCE_ATTACH_BACKING,
+                    flags: 0,
+                    fence_id: 0,
+                    ctx_id: 0,
+                    ring_idx: 0,
+                    padding: [0; 3],
+                },
+                resource_id: id,
+                nr_entries: 1,
+            },
+            entry: VirtioGpuMemEntry {
+                addr: phys,
+                length: width * height * 4,
+                padding: 0,
+            },
+        };
+        let mut resp_attach: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
+
+        send_command_queue(
+            0,
+            &[&req_attach as *const _ as u64],
+            &[core::mem::size_of_val(&req_attach) as u32],
+            &[&resp_attach as *const _ as u64],
+            &[core::mem::size_of_val(&resp_attach) as u32],
+        );
+        debugln!("VirtIO GPU: Attach Resource {} Resp: {:#x}", id, resp_attach.type_);
     };
-    let mut resp_attach: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
 
-    send_command_queue(
-        0,
-        &req_attach as *const _ as u64,
-        core::mem::size_of_val(&req_attach) as u32,
-        &resp_attach as *const _ as u64,
-        core::mem::size_of_val(&resp_attach) as u32,
-    );
+    // Create both resources
+    create_resource(1, phys_buf1);
+    create_resource(2, phys_buf2);
 
+    // Initial Scanout to Resource 1
     let req_scanout = VirtioGpuSetScanout {
         hdr: VirtioGpuCtrlHeader {
             type_: VIRTIO_GPU_CMD_SET_SCANOUT,
@@ -252,17 +281,66 @@ pub fn start_gpu(width: u32, height: u32, phys_buffer: u64) {
 
     send_command_queue(
         0,
-        &req_scanout as *const _ as u64,
-        core::mem::size_of_val(&req_scanout) as u32,
-        &resp_scanout as *const _ as u64,
-        core::mem::size_of_val(&resp_scanout) as u32,
+        &[&req_scanout as *const _ as u64],
+        &[core::mem::size_of_val(&req_scanout) as u32],
+        &[&resp_scanout as *const _ as u64],
+        &[core::mem::size_of_val(&resp_scanout) as u32],
     );
-    debugln!("VirtIO GPU: Set Scanout Resp: {:#x}", resp_scanout.type_);
+    debugln!("VirtIO GPU: Set Scanout (Res 1) Resp: {:#x}", resp_scanout.type_);
 
-    debugln!("VirtIO GPU: Started. Scanout set to Resource 1.");
+    debugln!("VirtIO GPU: Started with Page Flipping (Res 1 & 2).");
 }
 
-pub fn flush(x: u32, y: u32, width: u32, height: u32, screen_width: u32) {
+pub fn transfer_and_flush(resource_id: u32, width: u32, height: u32) {
+    let req_transfer = VirtioGpuTransferToHost2d {
+        hdr: VirtioGpuCtrlHeader {
+            type_: VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D,
+            flags: 0,
+            fence_id: 0,
+            ctx_id: 0,
+            ring_idx: 0,
+            padding: [0; 3],
+        },
+        r: VirtioGpuRect { x: 0, y: 0, width, height },
+        offset: 0,
+        resource_id,
+        padding: 0,
+    };
+    let mut resp_transfer: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
+
+    send_command_queue(
+        0,
+        &[&req_transfer as *const _ as u64],
+        &[core::mem::size_of_val(&req_transfer) as u32],
+        &[&resp_transfer as *const _ as u64],
+        &[core::mem::size_of_val(&resp_transfer) as u32],
+    );
+
+    let req_flush = VirtioGpuResourceFlush {
+        hdr: VirtioGpuCtrlHeader {
+            type_: VIRTIO_GPU_CMD_RESOURCE_FLUSH,
+            flags: 0,
+            fence_id: 0,
+            ctx_id: 0,
+            ring_idx: 0,
+            padding: [0; 3],
+        },
+        r: VirtioGpuRect { x: 0, y: 0, width, height },
+        resource_id,
+        padding: 0,
+    };
+    let mut resp_flush: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
+
+    send_command_queue(
+        0,
+        &[&req_flush as *const _ as u64],
+        &[core::mem::size_of_val(&req_flush) as u32],
+        &[&resp_flush as *const _ as u64],
+        &[core::mem::size_of_val(&resp_flush) as u32],
+    );
+}
+
+pub fn flush(x: u32, y: u32, width: u32, height: u32, screen_width: u32, resource_id: u32) {
     let offset = (y as u64 * screen_width as u64 + x as u64) * 4;
     
     let req_transfer = VirtioGpuTransferToHost2d {
@@ -276,17 +354,17 @@ pub fn flush(x: u32, y: u32, width: u32, height: u32, screen_width: u32) {
         },
         r: VirtioGpuRect { x, y, width, height },
         offset,
-        resource_id: 1,
+        resource_id,
         padding: 0,
     };
     let mut resp_transfer: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
 
-    let _ = send_command_queue(
+    send_command_queue(
         0,
-        &req_transfer as *const _ as u64,
-        core::mem::size_of_val(&req_transfer) as u32,
-        &resp_transfer as *const _ as u64,
-        core::mem::size_of_val(&resp_transfer) as u32,
+        &[&req_transfer as *const _ as u64],
+        &[core::mem::size_of_val(&req_transfer) as u32],
+        &[&resp_transfer as *const _ as u64],
+        &[core::mem::size_of_val(&resp_transfer) as u32],
     );
 
     let req_flush = VirtioGpuResourceFlush {
@@ -299,52 +377,42 @@ pub fn flush(x: u32, y: u32, width: u32, height: u32, screen_width: u32) {
             padding: [0; 3],
         },
         r: VirtioGpuRect { x, y, width, height },
-        resource_id: 1,
+        resource_id,
         padding: 0,
     };
     let mut resp_flush: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
 
     send_command_queue(
         0,
-        &req_flush as *const _ as u64,
-        core::mem::size_of_val(&req_flush) as u32,
-        &resp_flush as *const _ as u64,
-        core::mem::size_of_val(&resp_flush) as u32,
+        &[&req_flush as *const _ as u64],
+        &[core::mem::size_of_val(&req_flush) as u32],
+        &[&resp_flush as *const _ as u64],
+        &[core::mem::size_of_val(&resp_flush) as u32],
     );
 }
 
-pub fn setup_cursor(width: u32, height: u32, phys_buffer: u64, hot_x: u32, hot_y: u32) -> bool {
-    false
-}
-
-pub fn move_cursor(x: u32, y: u32) {
-    let req_move = VirtioGpuUpdateCursor {
+pub fn set_scanout(resource_id: u32, width: u32, height: u32) {
+    let req_scanout = VirtioGpuSetScanout {
         hdr: VirtioGpuCtrlHeader {
-            type_: VIRTIO_GPU_CMD_MOVE_CURSOR,
+            type_: VIRTIO_GPU_CMD_SET_SCANOUT,
             flags: 0,
             fence_id: 0,
             ctx_id: 0,
             ring_idx: 0,
             padding: [0; 3],
         },
-        pos: VirtioGpuCursorPos {
-            scanout_id: 0,
-            x,
-            y,
-            padding: 0,
-        },
-        resource_id: 0, // Not used for move
-        hot_x: 0,
-        hot_y: 0,
-        padding: 0,
+        r: VirtioGpuRect { x: 0, y: 0, width, height },
+        scanout_id: 0,
+        resource_id,
     };
+    let mut resp_scanout: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
 
-    let mut _resp_move: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
-
-    let _ = send_cursor_command(
-        &req_move as *const _ as u64,
-        core::mem::size_of_val(&req_move) as u32,
-        &_resp_move as *const _ as u64,
-        core::mem::size_of_val(&_resp_move) as u32,
+    send_command_queue(
+        0,
+        &[&req_scanout as *const _ as u64],
+        &[core::mem::size_of_val(&req_scanout) as u32],
+        &[&resp_scanout as *const _ as u64],
+        &[core::mem::size_of_val(&resp_scanout) as u32],
     );
 }
+

@@ -1,7 +1,7 @@
 use core::sync::atomic::{AtomicU16, Ordering};
 use crate::debugln;
 use crate::drivers::video::virtio;
-use crate::window_manager::display::{DISPLAY_SERVER, VIRTIO_ACTIVE, VIRTIO_CURSOR_ACTIVE, Color, State, Mouse as DisplayMouse}; 
+use crate::window_manager::display::{DISPLAY_SERVER, VIRTIO_ACTIVE, Color, State, Mouse as DisplayMouse}; 
 use super::composer::{COMPOSER, Composer};
 use super::events::{Event, MouseEvent, ResizeEvent, GLOBAL_EVENT_QUEUE};
 use super::window::{Items, Window};
@@ -31,6 +31,7 @@ pub static mut DRAG: bool = false;
 pub static mut DRAGGING_WINDOW: AtomicU16 = AtomicU16::new(0);
 pub static mut RESIZING_WINDOW: AtomicU16 = AtomicU16::new(0);
 pub static mut CLICK_STARTED_IN_TITLEBAR: bool = false;
+pub static mut CLICKED_WINDOW_ID: usize = 0;
 pub static mut W_WIDTH: usize = 0;
 pub static mut W_HEIGHT: usize = 0;
 pub static mut MOUSE_PENDING: bool = false;
@@ -47,8 +48,6 @@ impl Mouse {
         // Store old position
         let old_x = self.x;
         let old_y = self.y;
-
-        debugln!(".");
 
         // Calculate relative movement
         let mut x_rel = data[1] as i16;
@@ -84,8 +83,11 @@ impl Mouse {
         if self.left && !prev_left {
             let w = unsafe { (*(&raw mut COMPOSER)).find_window(self.x as usize, self.y as usize) };
             if let Some(ws) = w {
-                if ws.can_move && self.y as usize >= ws.y && self.y as usize <= ws.y + 25 {
-                    unsafe { CLICK_STARTED_IN_TITLEBAR = true; }
+                if ws.can_move && self.y as usize >= ws.y.max(0) as usize && self.y as usize <= (ws.y + 25).max(0) as usize {
+                    unsafe { 
+                        CLICK_STARTED_IN_TITLEBAR = true; 
+                        CLICKED_WINDOW_ID = ws.id;
+                    }
                 } else {
                     unsafe { CLICK_STARTED_IN_TITLEBAR = false; }
                 }
@@ -144,17 +146,10 @@ impl Mouse {
 
                     // Clear and restore the old cursor area from DB
                     // Note: copy_to_fb now in display_server
-                    if !VIRTIO_CURSOR_ACTIVE {
-                        display_server.copy_to_fb(old_x as u32, old_y as u32, 32, 32);
-                    }
+                    display_server.copy_to_fb(old_x as i32, old_y as i32, 32, 32);
 
                     // Copy window from DB to FB
-                    display_server.copy_to_fb(win_x as u32, win_y as u32, win_width as u32, win_height as u32);
-
-                    // FLUSH THE WINDOW AREA TO VIRTIO
-                    if VIRTIO_ACTIVE {
-                        virtio::flush(win_x as u32, win_y as u32, win_width as u32, win_height as u32, display_server.width as u32);
-                    }
+                    display_server.copy_to_fb(win_x as i32, win_y as i32, win_width as u32, win_height as u32);
 
                     display_server.draw_mouse(self.x, self.y, false);
 
@@ -164,6 +159,18 @@ impl Mouse {
                     W_HEIGHT = 0;
 
                     return;
+                }
+            }
+        }
+
+        // Global Drag Initiation Check
+        // Check this BEFORE finding window under mouse, because mouse might have moved OFF the window
+        unsafe {
+            if DRAG && CLICK_STARTED_IN_TITLEBAR {
+                if (*(&raw mut DRAGGING_WINDOW)).load(Ordering::Relaxed) == 0 {
+                    let wid = CLICKED_WINDOW_ID;
+                    (*(&raw mut DRAGGING_WINDOW)).store(wid as u16, Ordering::Relaxed);
+                    (*(&raw mut COMPOSER)).recompose_except(wid);
                 }
             }
         }
@@ -187,8 +194,10 @@ impl Mouse {
             let final_height = self.rem_sign(unsafe { W_HEIGHT } as i16 + dy) as usize;
 
             unsafe {
-                W_WIDTH = cap(final_width, ((*(&raw mut DISPLAY_SERVER)).width as usize).saturating_sub(w.x));
-                W_HEIGHT = cap(final_height, ((*(&raw mut DISPLAY_SERVER)).height as usize).saturating_sub(w.y));
+                let wx = w.x.max(0) as usize;
+                let wy = w.y.max(0) as usize;
+                W_WIDTH = cap(final_width, ((*(&raw mut DISPLAY_SERVER)).width as usize).saturating_sub(wx));
+                W_HEIGHT = cap(final_height, ((*(&raw mut DISPLAY_SERVER)).height as usize).saturating_sub(wy));
             }
 
             self.draw_square_outline(
@@ -201,11 +210,23 @@ impl Mouse {
 
             unsafe {
                 if VIRTIO_ACTIVE {
-                    virtio::flush(w.x as u32, w.y as u32, W_WIDTH as u32, W_HEIGHT as u32, (*(&raw mut DISPLAY_SERVER)).width as u32);
+                    virtio::flush(w.x as u32, w.y as u32, W_WIDTH as u32, W_HEIGHT as u32, (*(&raw mut DISPLAY_SERVER)).width as u32, (*(&raw mut DISPLAY_SERVER)).active_resource_id);
                 }
                 
-
                 (*(&raw mut DISPLAY_SERVER)).draw_mouse(self.x, self.y, false);
+                
+                if VIRTIO_ACTIVE {
+                    let mx = self.x as u32;
+                    let my = self.y as u32;
+                    let sw = (*(&raw mut DISPLAY_SERVER)).width as u32;
+                    let sh = (*(&raw mut DISPLAY_SERVER)).height as u32;
+                    let fw = (32 as u32).min(sw.saturating_sub(mx));
+                    let fh = (32 as u32).min(sh.saturating_sub(my));
+                    
+                    if fw > 0 && fh > 0 {
+                        virtio::flush(mx, my, fw, fh, sw, (*(&raw mut DISPLAY_SERVER)).active_resource_id);
+                    }
+                }
             }
             return;
 
@@ -232,21 +253,54 @@ impl Mouse {
             let id = w.id;
             let buffer = w.buffer;
 
-            // Calculate new window position based on mouse delta
-            let mut new_x = old_win_x as i32 + x_vec as i32;
-            let mut new_y = old_win_y as i32 - y_vec as i32; // Note: y_vec is inverted
+            // Calculate target position based on raw mouse delta
+            // BIDIRECTIONAL CLAMPING:
+            // 1. Constrain mouse movement to extended screen bounds (screen + 50px buffer).
+            let target_mx = old_x as i32 + x_vec as i32;
+            let target_my = old_y as i32 - y_vec as i32;
+            
+            let screen_w = display_server.width as i32;
+            let screen_h = display_server.height as i32;
+            
+            // Allow cursor to go slightly off-screen (buffer zone) to enable deep window sinking
+            let mouse_limit_w = screen_w + 50;
+            let mouse_limit_h = screen_h + 50;
 
-            // Only clamp the TOP edge to keep titlebar grabbable (keep 3px visible)
-            // let screen_height = display_server.height as i32;
-            let min_y = -(height as i32) + 3;
+            let clamped_mx = target_mx.max(0).min(mouse_limit_w - 1);
+            let clamped_my = target_my.max(0).min(mouse_limit_h - 1);
+            
+            let mouse_dx = clamped_mx - old_x as i32;
+            let mouse_dy = clamped_my - old_y as i32;
 
-            if new_y < min_y { new_y = min_y; }
+            // 2. Apply constrained mouse delta to window
+            let target_win_x = old_win_x as i32 + mouse_dx;
+            let target_win_y = old_win_y as i32 + mouse_dy; 
 
-            // No other clamping - let window go anywhere else!
+            // Constraints
+            let margin = 3; // Amount of window that must remain visible (3px)
+
+            // Clamp Window Position
+            // Allow dragging off-screen to left/top/right/bottom, keeping 'margin' visible.
+            let min_visible_x = -(width as i32) + margin;
+            let max_visible_x = screen_w - margin;
+            let min_visible_y = -(height as i32) + margin;
+            let max_visible_y = screen_h - margin;
+
+            let clamped_win_x = target_win_x.max(min_visible_x).min(max_visible_x);
+            let clamped_win_y = target_win_y.max(min_visible_y).min(max_visible_y);
+
+            // Calculate the ACTUAL delta the window made
+            let allowed_dx = clamped_win_x - old_win_x as i32;
+            let allowed_dy = clamped_win_y - old_win_y as i32;
+
+            // Lock Mouse to Window:
+            // Revert the raw mouse update done earlier and apply ONLY the allowed delta.
+            self.x = (old_x as i32 + allowed_dx).max(0).min(mouse_limit_w - 1) as u16;
+            self.y = (old_y as i32 + allowed_dy).max(0).min(mouse_limit_h - 1) as u16;
 
             // Update window position
-            let new_x = new_x.abs() as usize;
-            let new_y = new_y.abs() as usize;
+            let new_x = clamped_win_x as isize;
+            let new_y = clamped_win_y as isize;
 
             // Update the window coordinates in the composer
             for i in 0..composer.windows.len() {
@@ -258,122 +312,68 @@ impl Mouse {
             }
 
             // Erase old window position by copying clean background from DB to FB
+            // Note: copy_to_fb now handles negative coordinates (clipping internally)
             let src = display_server.double_buffer as *const u8;
             let dst = display_server.framebuffer as *mut u8;
             let pitch = display_server.pitch as usize;
-
-            // Fast path: window fully onscreen
-            if old_win_x + width <= display_server.width as usize &&
-                old_win_y + height <= display_server.height as usize {
-                unsafe {
-                    for row in 0..height {
-                        let offset = ((old_win_y + row) * pitch + old_win_x * 4) as usize;
-                        core::ptr::copy_nonoverlapping(
-                            src.add(offset),
-                            dst.add(offset),
-                            width * 4
-                        );
-                    }
-                }
-            } else if old_win_x < display_server.width as usize && old_win_y < display_server.height as usize {
-                // Slow path: window partially offscreen
-                let visible_width = width.min(display_server.width as usize - old_win_x);
-                let visible_height = height.min(display_server.height as usize - old_win_y);
-
-                unsafe {
-                    for row in 0..visible_height {
-                        let offset = ((old_win_y + row) * pitch + old_win_x * 4) as usize;
-                        core::ptr::copy_nonoverlapping(
-                            src.add(offset),
-                            dst.add(offset),
-                            visible_width * 4
-                        );
-                    }
-                }
-            }
+            
+            // We use copy_to_fb to restore the background at the OLD window position
+            // But display_server.copy_to_fb takes a source of "double_buffer" implicitly.
+            // Since we are moving the window, we want to restore the background where the window WAS.
+            // The "old" window pixels are on the FB, we want to overwrite them with DB pixels.
+            // display_server.copy_to_fb(old_x, old_y, w, h) does exactly that (copies DB -> FB).
+            
+            // Wait, previously we had an optimization "Fast path" / "Slow path" using raw pointers.
+            // Since copy_to_fb now supports clipping and i32, we can just use it!
+            // It is much cleaner and less error prone.
+            
+            display_server.copy_to_fb(old_win_x as i32, old_win_y as i32, width as u32, height as u32);
 
             // Draw window from its buffer at new position directly to FB
-            let src_buffer = buffer as *const u8;
-            let dst_fb = display_server.framebuffer as *mut u8;
-            let src_pitch = width * 4;
-            let dst_pitch = display_server.pitch as usize;
+            // We can't use copy_to_fb for this because copy_to_fb sources from double_buffer.
+            // We need to source from `buffer` (the window's buffer).
+            // So we call copy_to_fb_a (which sources from a specific buffer).
+            
+            display_server.copy_to_fb_a(width as u32, height as u32, buffer, new_x as i32, new_y as i32);
 
-            // Fast path: window fully onscreen at new position
-            if  new_x + width <= display_server.width as usize &&
-                new_y + height <= display_server.height as usize {
-                let new_x = new_x as usize;
-                let new_y = new_y as usize;
-                unsafe {
-                    for row in 0..height {
-                        let src_offset = row * src_pitch;
-                        let dst_offset = (new_y + row) * dst_pitch + new_x * 4;
-                        core::ptr::copy_nonoverlapping(
-                            src_buffer.add(src_offset),
-                            dst_fb.add(dst_offset),
-                            width * 4
-                        );
-                    }
-                }
-            } else {
-                // Slow path: window partially offscreen
-                let draw_x = new_x.max(0) as usize;
-                let draw_y = new_y.max(0) as usize;
-
-                if draw_x < display_server.width as usize && draw_y < display_server.height as usize {
-                    let src_x_offset = if new_x < 0 { (-(new_x as i32)) as usize } else { 0 };
-                    let src_y_offset = if new_y < 0 { (-(new_y as i32)) as usize } else { 0 };
-
-                    let visible_width = (width - src_x_offset).min(display_server.width as usize - draw_x);
-                    let visible_height = (height - src_y_offset).min(display_server.height as usize - draw_y);
-
-                    unsafe {
-                        for row in 0..visible_height {
-                            let src_offset = (src_y_offset + row) * src_pitch + src_x_offset * 4;
-                            let dst_offset = (draw_y + row) * dst_pitch + draw_x * 4;
-                            core::ptr::copy_nonoverlapping(
-                                src_buffer.add(src_offset),
-                                dst_fb.add(dst_offset),
-                                visible_width * 4
-                            );
-                        }
-                    }
-                }
-            }
-
-            // Calculate union rect of old and new positions for efficient flush
-            // Clamp to screen bounds for VirtIO flush
+            // Calculate flush rect (Union of: Old Window, New Window, New Cursor)
             let old_x_clamped = (old_win_x as i32).max(0) as u32;
             let old_y_clamped = (old_win_y as i32).max(0) as u32;
-            let new_x_clamped = new_x.max(0) as u32;
-            let new_y_clamped = new_y.max(0) as u32;
-            let screen_w = unsafe { (*(&raw const DISPLAY_SERVER)).width as usize };
-            let screen_h = unsafe { (*(&raw const DISPLAY_SERVER)).height as usize };
+            let new_x_clamped = (new_x as i32).max(0) as u32;
+            let new_y_clamped = (new_y as i32).max(0) as u32;
+            let mouse_x = self.x as u32;
+            let mouse_y = self.y as u32;
 
-            let old_x_end = (old_win_x + width).max(0).min(screen_w) as u32;
-            let old_y_end = (old_win_y + height).max(0).min(screen_h) as u32;
-            let new_x_end = (new_x + width).max(0).min(screen_w) as u32;
-            let new_y_end = (new_y + height).max(0).min(screen_h) as u32;
+            let screen_w_u32 = screen_w as u32;
+            let screen_h_u32 = screen_h as u32;
 
-            let min_x = old_x_clamped.min(new_x_clamped);
-            let min_y = old_y_clamped.min(new_y_clamped);
-            let max_x = old_x_end.max(new_x_end);
-            let max_y = old_y_end.max(new_y_end);
+            let old_x_end = (old_win_x as i32 + width as i32).max(0).min(screen_w).max(0) as u32;
+            let old_y_end = (old_win_y as i32 + height as i32).max(0).min(screen_h).max(0) as u32;
+            let new_x_end = (new_x as i32 + width as i32).max(0).min(screen_w).max(0) as u32;
+            let new_y_end = (new_y as i32 + height as i32).max(0).min(screen_h).max(0) as u32;
+            let mouse_x_end = (mouse_x + 32).min(screen_w_u32);
+            let mouse_y_end = (mouse_y + 32).min(screen_h_u32);
+
+            let min_x = old_x_clamped.min(new_x_clamped).min(mouse_x);
+            let min_y = old_y_clamped.min(new_y_clamped).min(mouse_y);
+            let max_x = old_x_end.max(new_x_end).max(mouse_x_end);
+            let max_y = old_y_end.max(new_y_end).max(mouse_y_end);
 
             let flush_x = min_x;
             let flush_y = min_y;
             let flush_w = max_x.saturating_sub(min_x);
             let flush_h = max_y.saturating_sub(min_y);
 
-            // SINGLE FLUSH TO VIRTIO for both old and new positions
-            unsafe {
-                if VIRTIO_ACTIVE {
-                    virtio::flush(flush_x, flush_y, flush_w, flush_h, display_server.width as u32);
-                }
-            }
-
             // Draw cursor at new position
             unsafe {
                 display_server.draw_mouse(self.x, self.y, true);
+            }
+
+            // SINGLE FLUSH TO VIRTIO for both old and new positions
+            unsafe {
+                if VIRTIO_ACTIVE && flush_w > 0 && flush_h > 0 {
+                    virtio::flush(flush_x, flush_y, flush_w, flush_h, display_server.width as u32, display_server.active_resource_id);
+                }
             }
             return;
         }
@@ -381,102 +381,36 @@ impl Mouse {
         // Normal case (not dragging) - erase old cursor by copying from DB to FB
         unsafe {
             let display_server = &mut *(&raw mut DISPLAY_SERVER);
-            if !VIRTIO_CURSOR_ACTIVE {
-                display_server.copy_to_fb(old_x as u32, old_y as u32, 32, 32);
+            display_server.copy_to_fb(old_x as i32, old_y as i32, 32, 32);
+            
+            // Draw new cursor (no flush inside)
+            display_server.draw_mouse(self.x, self.y, false);
+
+            if VIRTIO_ACTIVE {
+                 // Calculate union of Old and New cursor positions for ATOMIC flush
+                 let u_old_x = old_x as u32;
+                 let u_old_y = old_y as u32;
+                 let u_new_x = self.x as u32;
+                 let u_new_y = self.y as u32;
+                 
+                 let min_x = u_old_x.min(u_new_x);
+                 let min_y = u_old_y.min(u_new_y);
+                 let max_x = (u_old_x + 32).max(u_new_x + 32);
+                 let max_y = (u_old_y + 32).max(u_new_y + 32);
+                 
+                 let screen_w = display_server.width as u32;
+                 let screen_h = display_server.height as u32;
+                 
+                 let flush_x = min_x.min(screen_w);
+                 let flush_y = min_y.min(screen_h);
+                 let flush_w = (max_x.min(screen_w)).saturating_sub(flush_x);
+                 let flush_h = (max_y.min(screen_h)).saturating_sub(flush_y);
+                 
+                 if flush_w > 0 && flush_h > 0 {
+                    virtio::flush(flush_x, flush_y, flush_w, flush_h, screen_w, display_server.active_resource_id);
+                 }
             }
         };
-
-        // Handle window interaction
-        if let Some(ws) = w {
-            // Bring window to front on click
-            if ws.w_type == Items::Window && ws.z != 0 && self.left && !prev_left {
-                let x = ws.x;
-                let y = ws.y;
-                let width = ws.width;
-                let height = ws.height;
-                let id = ws.id;
-
-                unsafe {
-                    for i in (*(&raw mut COMPOSER)).windows.iter_mut() {
-                        if i.id != id {
-                            i.z = i.z.wrapping_add(1);
-                        } else {
-                            i.z = 0;
-                        }
-                    }
-                    (*(&raw mut COMPOSER)).windows.sort_by_key(|w| w.z);
-                    (*(&raw mut COMPOSER)).copy_window(id);
-
-                    (*(&raw mut DISPLAY_SERVER)).copy_to_fb(
-                        x as u32,
-                        y as u32,
-                        width as u32,
-                        height as u32,
-                    );
-                }
-            }
-
-            let mut handled_drag = false;
-            if self.left {
-                // Check if starting drag from titlebar
-                if ws.can_move && self.y as usize >= ws.y && self.y as usize <= ws.y + 25 {
-                    if unsafe { DRAG == true && CLICK_STARTED_IN_TITLEBAR } {
-                        if unsafe { (*(&raw mut DRAGGING_WINDOW)).load(Ordering::Relaxed) == 0 } {
-                            unsafe {
-                                (*(&raw mut DRAGGING_WINDOW)).store(ws.id as u16, Ordering::Relaxed);
-                                (*(&raw mut COMPOSER)).recompose_except(ws.id);
-                            }
-                        }
-                        handled_drag = true;
-                    }
-                // Check if starting resize from bottom-right corner
-                } else if ws.can_move && self.is_bottom_right(
-                    ws.x as u16,
-                    ws.y as u16,
-                    ws.width as u16,
-                    ws.height as u16,
-                    self.x,
-                    self.y
-                ) {
-                    if unsafe { DRAG == true } {
-                        if unsafe { (*(&raw mut RESIZING_WINDOW)).load(Ordering::Relaxed) == 0 } {
-                            unsafe {
-                                W_WIDTH = ws.width;
-                                W_HEIGHT = ws.height;
-                                (*(&raw mut RESIZING_WINDOW)).store(ws.id as u16, Ordering::Relaxed);
-                            }
-                        }
-                        handled_drag = true;
-                    }
-                }
-            }
-
-            if handled_drag {
-                unsafe { (*(&raw mut DISPLAY_SERVER)).draw_mouse(self.x, self.y, false); }
-                return;
-            }
-
-            // Send mouse event to window
-            if ws.event_handler != 0 && unsafe { DRAG == false } {
-                let xc = ws.x;
-                let yc = ws.y;
-                let id = ws.id;
-                unsafe {
-                    (*(&raw mut GLOBAL_EVENT_QUEUE)).add_event(Event::Mouse(MouseEvent {
-                        wid: id as u32,
-                        x: self.x as usize - xc,
-                        y: self.y as usize - yc,
-                        buttons: [self.left, self.center, self.right],
-                        scroll: scroll_val,
-                    }));
-                }
-            }
-        }
-
-        // Draw mouse cursor at new position
-        unsafe {
-            (*(&raw mut DISPLAY_SERVER)).draw_mouse(self.x, self.y, false);
-        }
     }
 
     fn rem_sign(&self, n: i16) -> u16 {
@@ -518,9 +452,17 @@ impl Mouse {
     fn clamp_mx(&self, n: i16) -> u16 {
         let mx_0 = self.x as i16;
         let sx = unsafe { (*(&raw mut DISPLAY_SERVER)).width } as u16;
+        
+        let limit = unsafe {
+            if (*(&raw mut DRAGGING_WINDOW)).load(Ordering::Relaxed) != 0 {
+                sx + 50
+            } else {
+                sx.saturating_sub(3)
+            }
+        };
 
-        if n + mx_0 >= (sx as i16 - 2) {
-            sx.wrapping_sub(2)
+        if n + mx_0 >= (limit as i16) {
+            limit.saturating_sub(1)
         } else if n + mx_0 <= 0 {
             0
         } else {
@@ -531,9 +473,17 @@ impl Mouse {
     fn clamp_my(&self, n: i16) -> u16 {
         let my_0 = self.y as i16;
         let sy = unsafe { (*(&raw mut DISPLAY_SERVER)).height } as u16;
+        
+        let limit = unsafe {
+            if (*(&raw mut DRAGGING_WINDOW)).load(Ordering::Relaxed) != 0 {
+                sy + 50
+            } else {
+                sy.saturating_sub(3)
+            }
+        };
 
-        if n + my_0 >= (sy as i16 - 2) {
-            sy.wrapping_sub(2)
+        if n + my_0 >= (limit as i16) {
+            limit.saturating_sub(1)
         } else if n + my_0 <= 0 {
             return 0;
         } else {

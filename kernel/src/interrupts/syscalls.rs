@@ -164,8 +164,8 @@ pub extern "C" fn syscall_dispatcher(context: &mut CPUState) {
                                 (*(&raw mut COMPOSER)).windows[j].width as u32,
                                 (*(&raw mut COMPOSER)).windows[j].height as u32,
                                 (*(&raw mut COMPOSER)).windows[j].buffer,
-                                (*(&raw mut COMPOSER)).windows[j].x as u32,
-                                (*(&raw mut COMPOSER)).windows[j].y as u32,
+                                (*(&raw mut COMPOSER)).windows[j].x as i32,
+                                (*(&raw mut COMPOSER)).windows[j].y as i32,
                             );
                         }
                     }

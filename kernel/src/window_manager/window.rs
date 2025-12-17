@@ -14,8 +14,8 @@ pub enum Items {
 pub struct Window {
     pub id: usize,
     pub buffer: usize,
-    pub x: usize,
-    pub y: usize,
+    pub x: isize,
+    pub y: isize,
     pub z: usize,
     pub width: usize,
     pub height: usize,

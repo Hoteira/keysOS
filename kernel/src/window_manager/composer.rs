@@ -21,8 +21,8 @@ impl Composer {
                             self.windows[i].width as u32,
                             self.windows[i].height as u32,
                             self.windows[i].buffer,
-                            self.windows[i].x as u32,
-                            self.windows[i].y as u32,
+                            self.windows[i].x as i32,
+                            self.windows[i].y as i32,
                         )
                     },
                 }
@@ -40,8 +40,8 @@ impl Composer {
                             self.windows[i].width as u32,
                             self.windows[i].height as u32,
                             self.windows[i].buffer,
-                            self.windows[i].x as u32,
-                            self.windows[i].y as u32,
+                            self.windows[i].x as i32,
+                            self.windows[i].y as i32,
                         )
                     },
                 }
@@ -50,11 +50,14 @@ impl Composer {
     }
 
     pub fn find_window(&mut self, x: usize, y: usize) -> Option<&mut Window> {
+        let mx = x as isize;
+        let my = y as isize;
+        
         for i in 0..self.windows.len() {
-            if x >= self.windows[i].x
-                && x <= (self.windows[i].x + self.windows[i].width)
-                && y >= self.windows[i].y
-                && y <= (self.windows[i].y + self.windows[i].height)
+            if mx >= self.windows[i].x
+                && mx <= (self.windows[i].x + self.windows[i].width as isize)
+                && my >= self.windows[i].y
+                && my <= (self.windows[i].y + self.windows[i].height as isize)
             {
                 match self.windows[i].w_type {
                     Items::Null => {}
@@ -149,8 +152,8 @@ impl Composer {
                                 self.windows[i].width as u32,
                                 self.windows[i].height as u32,
                                 self.windows[i].buffer,
-                                self.windows[i].x as u32,
-                                self.windows[i].y as u32,
+                                self.windows[i].x as i32,
+                                self.windows[i].y as i32,
                             );
                         }
                     }
@@ -187,8 +190,8 @@ impl Composer {
                             self.windows[j].width as u32,
                             self.windows[j].height as u32,
                             self.windows[j].buffer,
-                            self.windows[j].x as u32,
-                            self.windows[j].y as u32,
+                            self.windows[j].x as i32,
+                            self.windows[j].y as i32,
                         );
                     }
                 }

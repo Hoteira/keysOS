@@ -47,6 +47,12 @@ pub fn setup_queue(common_cfg: *mut u8, index: u16, notify_base: u64, notify_mul
             let notify_addr = notify_base + (notify_off as u64 * notify_multiplier as u64);
 
             write_16(common_cfg.add(OFF_QUEUE_ENABLE), 1);
+            
+            // Verify enablement
+            let enabled = read_16(common_cfg.add(OFF_QUEUE_ENABLE));
+            if enabled != 1 {
+                debugln!("VirtIO GPU: WARNING - Queue {} failed to enable! Read back: {}", index, enabled);
+            }
 
             VIRT_QUEUES[index as usize] = Some(VirtQueue {
                 desc_phys: desc_addr,
@@ -59,23 +65,12 @@ pub fn setup_queue(common_cfg: *mut u8, index: u16, notify_base: u64, notify_mul
                 notify_addr,
             });
             
-            debugln!("VirtIO GPU: Queue {} setup at phys {:#x}. Notify: {:#x}", index, frame, notify_addr);
+            debugln!("VirtIO GPU: Queue {} setup at phys {:#x}. Notify Off: {}, Addr: {:#x}", index, frame, notify_off, notify_addr);
         }
     }
 }
 
-pub fn send_cursor_command(req_phys: u64, req_len: u32, resp_phys: u64, resp_len: u32) -> bool {
-    unsafe {
-        if VIRT_QUEUES[1].is_some() {
-            send_command_queue(1, req_phys, req_len, resp_phys, resp_len)
-        } else {
-            // Fallback to Control Queue if Cursor Queue not available
-            send_command_queue(0, req_phys, req_len, resp_phys, resp_len)
-        }
-    }
-}
-
-pub fn send_command_queue(queue_idx: usize, req_phys: u64, req_len: u32, resp_phys: u64, resp_len: u32) -> bool {
+pub fn send_command_queue(queue_idx: usize, out_phys: &[u64], out_lens: &[u32], in_phys: &[u64], in_lens: &[u32]) -> bool {
     unsafe {
         let int_enabled = crate::interrupts::idt::interrupts();
         if int_enabled { core::arch::asm!("cli"); }
@@ -88,35 +83,52 @@ pub fn send_command_queue(queue_idx: usize, req_phys: u64, req_len: u32, resp_ph
             }
         };
 
-        let head_idx = vq.free_head % vq.num;
-        let next_idx = (vq.free_head + 1) % vq.num;
+        let total_descs = out_phys.len() + in_phys.len();
+        if total_descs == 0 {
+            if int_enabled { core::arch::asm!("sti"); }
+            return false;
+        }
 
-        vq.free_head = vq.free_head.wrapping_add(2);
+        let free_head_usize = vq.free_head as usize;
+        let num_usize = vq.num as usize;
+        let mut current_desc_idx = free_head_usize;
 
-        let desc_ptr = vq.desc_phys as *mut VirtqDesc;
 
-        *(desc_ptr.add(head_idx as usize)) = VirtqDesc {
-            addr: req_phys,
-            len: req_len,
-            flags: 1, // NEXT
-            next: next_idx,
-        };
+        // Populate output (read-only by device) descriptors
+        for i in 0..out_phys.len() {
+            *(vq.desc_phys as *mut VirtqDesc).add(current_desc_idx) = VirtqDesc {
+                addr: out_phys[i],
+                len: out_lens[i],
+                flags: if i == out_phys.len() - 1 && in_phys.len() == 0 { 0 } else { 1 }, // NEXT, unless last in chain
+                next: ((current_desc_idx + 1) % num_usize) as u16,
+            };
+            current_desc_idx = (current_desc_idx + 1) % num_usize;
+        }
 
-        *(desc_ptr.add(next_idx as usize)) = VirtqDesc {
-            addr: resp_phys,
-            len: resp_len,
-            flags: 2, // WRITE
-            next: 0,
-        };
+        // Populate input (write-only by device) descriptors
+        for i in 0..in_phys.len() {
+            *(vq.desc_phys as *mut VirtqDesc).add(current_desc_idx) = VirtqDesc {
+                addr: in_phys[i],
+                len: in_lens[i],
+                flags: 2 | (if i == in_phys.len() - 1 { 0 } else { 1 }), // WRITE, and NEXT if not last
+                next: ((current_desc_idx + 1) % num_usize) as u16,
+            };
+            current_desc_idx = (current_desc_idx + 1) % num_usize;
+        }
+        
+        // Fix up the 'next' field of the last descriptor in the chain
+        let last_desc_idx = (free_head_usize + total_descs - 1) % num_usize;
+        (*(vq.desc_phys as *mut VirtqDesc).add(last_desc_idx)).next = 0; // End of chain
 
         let avail_ptr = vq.avail_phys as *mut VirtqAvail;
         let idx = (*avail_ptr).idx;
-        (*avail_ptr).ring[(idx % vq.num) as usize] = head_idx;
+        (*avail_ptr).ring[(idx % vq.num) as usize] = vq.free_head;
 
-        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+        core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
         (*avail_ptr).idx = idx.wrapping_add(1);
 
         write_volatile(vq.notify_addr as *mut u16, vq.queue_index);
+        vq.free_head = ((free_head_usize + total_descs) % num_usize) as u16;
 
         let used_ptr = vq.used_phys as *mut VirtqUsed;
         let mut timeout = 10_000_000;

@@ -12,6 +12,10 @@ pub struct DisplayServer {
 
     pub framebuffer: u64,
     pub double_buffer: u64,
+    
+    pub buffer1_phys: u64,
+    pub buffer2_phys: u64,
+    pub active_resource_id: u32,
 }
 
 pub static mut DISPLAY_SERVER: DisplayServer = DisplayServer {
@@ -21,10 +25,12 @@ pub static mut DISPLAY_SERVER: DisplayServer = DisplayServer {
     depth: 32,
     framebuffer: 0,
     double_buffer: 0,
+    buffer1_phys: 0,
+    buffer2_phys: 0,
+    active_resource_id: 1,
 };
 
 pub static mut VIRTIO_ACTIVE: bool = false;
-pub static mut VIRTIO_CURSOR_ACTIVE: bool = false;
 
 impl DisplayServer {
     pub fn init(&mut self) {
@@ -42,23 +48,53 @@ impl DisplayServer {
                 let size_bytes = (self.pitch * self.height) as usize;
                 let pages = (size_bytes + 4095) / 4096;
 
-                let db = crate::memory::pmm::allocate_frames(pages, 0).expect("Failed to allocate double buffer");
-                let fb = crate::memory::pmm::allocate_frames(pages, 0).expect("Failed to allocate framebuffer");
+                let b1 = crate::memory::pmm::allocate_frames(pages, 0).expect("Failed to allocate buffer 1");
+                let b2 = crate::memory::pmm::allocate_frames(pages, 0).expect("Failed to allocate buffer 2");
 
-                core::ptr::write_bytes(db as *mut u8, 0, size_bytes);
-                core::ptr::write_bytes(fb as *mut u8, 0, size_bytes);
+                core::ptr::write_bytes(b1 as *mut u8, 0, size_bytes);
+                core::ptr::write_bytes(b2 as *mut u8, 0, size_bytes);
 
+                self.buffer1_phys = b1;
+                self.buffer2_phys = b2;
+                
+                // Active (Front) is Buffer 1
+                self.framebuffer = b1;
+                self.active_resource_id = 1;
+                
+                // Double (Back) is Buffer 2
+                self.double_buffer = b2;
 
-                self.double_buffer = db;
-                self.framebuffer = fb;
+                virtio::start_gpu(self.width as u32, self.height as u32, self.buffer1_phys, self.buffer2_phys);
 
-                virtio::start_gpu(self.width as u32, self.height as u32, self.framebuffer);
+                // Initialize Host Resources with zeroed data
+                virtio::transfer_and_flush(1, self.width as u32, self.height as u32);
+                virtio::transfer_and_flush(2, self.width as u32, self.height as u32);
 
-                VIRTIO_CURSOR_ACTIVE = false;
+                // Setup Hardware Cursor
+                use crate::drivers::periferics::mouse::{CURSOR_BUFFER, CURSOR_WIDTH, CURSOR_HEIGHT};
+                let cursor_size_bytes = (CURSOR_WIDTH * CURSOR_HEIGHT * 4) as usize;
+                let cursor_pages = (cursor_size_bytes + 4095) / 4096;
+                if let Some(cursor_phys) = crate::memory::pmm::allocate_frames(cursor_pages, 0) {
+                    let cursor_ptr = cursor_phys as *mut u32;
+                    // Copy cursor buffer
+                    for i in 0..CURSOR_BUFFER.len() {
+                        *cursor_ptr.add(i) = CURSOR_BUFFER[i];
+                    }
+                    
+                    // Temporarily disabled hardware cursor setup
+                    // virtio::cursor::setup_cursor(cursor_phys, CURSOR_WIDTH as u32, CURSOR_HEIGHT as u32, self.width as u32 / 2, self.height as u32 / 2);
+                    debugln!("DisplayServer: Hardware cursor is DISABLED by request.");
+                } else {
+                    println!("DisplayServer: Failed to allocate hardware cursor buffer!");
+                    debugln!("DisplayServer: Hardware cursor is NOT ACTIVE (buffer alloc failed).");
+                }
+
                 VIRTIO_ACTIVE = true;
 
                 println!("DisplayServer: VirtIO GPU active at {}x{}", self.width, self.height);
                 return;
+            } else {
+                debugln!("DisplayServer: Hardware cursor is NOT ACTIVE (VirtIO GPU not found or setup failed).");
             }
         }
 
@@ -83,33 +119,66 @@ impl DisplayServer {
         }
     }
 
-    pub fn copy(&self) {
+    pub fn copy(&mut self) {
         unsafe {
-            let buffer_size = self.pitch as u64 * self.height as u64;
-            core::ptr::copy(
-                self.double_buffer as *const u8,
-                self.framebuffer as *mut u8,
-                buffer_size as usize,
-            );
-
             if VIRTIO_ACTIVE {
-                virtio::flush(0, 0, self.width as u32, self.height as u32, self.width as u32);
+                // PAGE FLIP LOGIC
+                let next_resource = if self.active_resource_id == 1 { 2 } else { 1 };
+                let next_buffer = if self.active_resource_id == 1 { self.buffer2_phys } else { self.buffer1_phys };
+                let current_buffer = if self.active_resource_id == 1 { self.buffer1_phys } else { self.buffer2_phys };
+
+                // 1. Transfer BACK buffer (which we just drew to) to host and flush it
+                virtio::transfer_and_flush(next_resource, self.width as u32, self.height as u32);
+
+                // 2. Set scanout to BACK buffer (Flip)
+                virtio::set_scanout(next_resource, self.width as u32, self.height as u32);
+
+                // 3. Update state
+                self.active_resource_id = next_resource;
+                
+                // Swap pointers:
+                // framebuffer becomes the NEW active buffer (what was back)
+                // double_buffer becomes the NEW back buffer (what was front, to be drawn over)
+                self.framebuffer = next_buffer;
+                self.double_buffer = current_buffer;
+
+                // Sync the new back buffer with the current front buffer (which contains the clean scene)
+                // This ensures the back buffer is a valid source for background restoration.
+                let size_bytes = (self.pitch * self.height) as usize;
+                core::ptr::copy_nonoverlapping(
+                    self.framebuffer as *const u8,
+                    self.double_buffer as *mut u8,
+                    size_bytes
+                );
+
+            } else {
+                let buffer_size = self.pitch as u64 * self.height as u64;
+                core::ptr::copy(
+                    self.double_buffer as *const u8,
+                    self.framebuffer as *mut u8,
+                    buffer_size as usize,
+                );
             }
         }
     }
 
-    pub fn copy_to_fb(&self, x: u32, y: u32, width: u32, height: u32) {
+    pub fn copy_to_fb(&self, x: i32, y: i32, width: u32, height: u32) {
         let bytes_per_pixel = 4;
+        let screen_w = self.width as i32;
+        let screen_h = self.height as i32;
 
-        let max_x = (self.width as u32).min(x + width);
-        let max_y = (self.height as u32).min(y + height);
+        let dst_x = x.max(0);
+        let dst_y = y.max(0);
+        let end_x = (x + width as i32).min(screen_w);
+        let end_y = (y + height as i32).min(screen_h);
 
-        if x >= self.width as u32 || y >= self.height as u32 {
-            return;
-        }
+        if end_x <= dst_x || end_y <= dst_y { return; }
 
-        let copy_width = (max_x - x) as usize;
-        let copy_height = (max_y - y) as usize;
+        let copy_width = (end_x - dst_x) as usize;
+        let copy_height = (end_y - dst_y) as usize;
+
+        let src_off_x = (dst_x - x) as usize;
+        let src_off_y = (dst_y - y) as usize;
 
         let src = self.double_buffer as *const u8;
         let dst = self.framebuffer as *mut u8;
@@ -117,128 +186,133 @@ impl DisplayServer {
 
         unsafe {
             for row in 0..copy_height {
-                let src_offset = ((y as usize + row) * pitch + x as usize * bytes_per_pixel) as usize;
-                let dst_offset = ((y as usize + row) * pitch + x as usize * bytes_per_pixel) as usize;
+                // SRC: pitch * (original_y + src_off_y + row) + (original_x + src_off_x) * 4
+                // But wait, source is double_buffer (screen sized).
+                // So source coords are SAME as dest coords for copy_to_fb (restoring background).
+                
+                let offset = ((dst_y as usize + row) * pitch + dst_x as usize * bytes_per_pixel) as usize;
 
                 core::ptr::copy_nonoverlapping(
-                    src.add(src_offset),
-                    dst.add(dst_offset),
+                    src.add(offset),
+                    dst.add(offset),
                     copy_width * bytes_per_pixel
                 );
-            }
-
-            if VIRTIO_ACTIVE {
-                virtio::flush(x, y, width, height, self.width as u32);
             }
         }
     }
 
-    pub fn copy_to_db(&self, width: u32, height: u32, buffer: usize, x: u32, y: u32) {
-        let dst_pitch = self.pitch as usize;
-        let src_pitch = (width as usize) * 4;
+    pub fn copy_to_db(&self, width: u32, height: u32, buffer: usize, x: i32, y: i32) {
+        let dst_pitch = self.pitch as usize / 4; // Pitch in u32
+        let src_pitch = width as usize;          // Pitch in u32
+        let screen_w = self.width as i32;
+        let screen_h = self.height as i32;
 
-        let max_x = (self.width as u32).min(x + width);
-        let max_y = (self.height as u32).min(y + height);
+        let dst_x = x.max(0);
+        let dst_y = y.max(0);
+        let end_x = (x + width as i32).min(screen_w);
+        let end_y = (y + height as i32).min(screen_h);
 
-        if x >= self.width as u32 || y >= self.height as u32 {
-            return;
-        }
+        if end_x <= dst_x || end_y <= dst_y { return; }
 
-        let copy_width = (max_x - x) as usize;
-        let copy_height = (max_y - y) as usize;
+        let copy_width = (end_x - dst_x) as usize;
+        let copy_height = (end_y - dst_y) as usize;
+        
+        let src_off_x = (dst_x - x) as usize;
+        let src_off_y = (dst_y - y) as usize;
 
         unsafe {
-            let src_base = buffer as *const u8;
-            let dst_base = self.double_buffer as *mut u8;
+            let src_base = buffer as *const u32;
+            let dst_base = self.double_buffer as *mut u32;
 
             for row in 0..copy_height {
-                let src_row_ptr = src_base.add(row * src_pitch);
-                let dst_row_ptr = dst_base.add((y as usize + row) * dst_pitch + (x as usize) * 4);
+                let src_row_ptr = src_base.add((src_off_y + row) * src_pitch + src_off_x);
+                let dst_row_ptr = dst_base.add((dst_y as usize + row) * dst_pitch + (dst_x as usize));
 
                 for col in 0..copy_width {
-                    let offset = col * 4;
-                    let src_ptr = src_row_ptr.add(offset);
-                    let dst_ptr = dst_row_ptr.add(offset);
+                    let src_pixel = *src_row_ptr.add(col);
+                    let alpha = (src_pixel >> 24) & 0xFF;
 
-                    let src_a = *src_ptr.add(3);
-
-                    if src_a == 255 {
-                        *(dst_ptr as *mut u32) = *(src_ptr as *const u32);
-                    } else if src_a == 0 {
+                    if alpha == 255 {
+                        *dst_row_ptr.add(col) = src_pixel;
+                    } else if alpha == 0 {
                         continue;
                     } else {
-                        let alpha = src_a as u32;
+                        let dst_pixel = *dst_row_ptr.add(col);
+                        
                         let inv_alpha = 255 - alpha;
 
-                        let src_r = *src_ptr as u32;
-                        let src_g = *src_ptr.add(1) as u32;
-                        let src_b = *src_ptr.add(2) as u32;
+                        let src_r = (src_pixel >> 16) & 0xFF;
+                        let src_g = (src_pixel >> 8) & 0xFF;
+                        let src_b = src_pixel & 0xFF;
 
-                        let dst_r = *dst_ptr as u32;
-                        let dst_g = *dst_ptr.add(1) as u32;
-                        let dst_b = *dst_ptr.add(2) as u32;
+                        let dst_r = (dst_pixel >> 16) & 0xFF;
+                        let dst_g = (dst_pixel >> 8) & 0xFF;
+                        let dst_b = dst_pixel & 0xFF;
 
-                        *dst_ptr = ((src_r * alpha + dst_r * inv_alpha) / 255) as u8;
-                        *dst_ptr.add(1) = ((src_g * alpha + dst_g * inv_alpha) / 255) as u8;
-                        *dst_ptr.add(2) = ((src_b * alpha + dst_b * inv_alpha) / 255) as u8;
-                        *dst_ptr.add(3) = 255;
+                        let r = (src_r * alpha + dst_r * inv_alpha) >> 8;
+                        let g = (src_g * alpha + dst_g * inv_alpha) >> 8;
+                        let b = (src_b * alpha + dst_b * inv_alpha) >> 8;
+
+                        *dst_row_ptr.add(col) = (0xFF << 24) | (r << 16) | (g << 8) | b;
                     }
                 }
             }
         }
     }
 
-    pub fn copy_to_fb_a(&self, width: u32, height: u32, buffer: usize, x: u32, y: u32) {
-        const BYTES_PER_PIXEL: usize = 4;
+    pub fn copy_to_fb_a(&self, width: u32, height: u32, buffer: usize, x: i32, y: i32) {
+        let dst_pitch = self.pitch as usize / 4;
+        let src_pitch = width as usize;
+        let screen_w = self.width as i32;
+        let screen_h = self.height as i32;
 
-        let dst_pitch = self.pitch as usize;
-        let src_pitch = (width as usize) * BYTES_PER_PIXEL;
+        let dst_x = x.max(0);
+        let dst_y = y.max(0);
+        let end_x = (x + width as i32).min(screen_w);
+        let end_y = (y + height as i32).min(screen_h);
 
-        let max_x = (self.width as u32).min(x + width);
-        let max_y = (self.height as u32).min(y + height);
+        if end_x <= dst_x || end_y <= dst_y { return; }
 
-        if x >= self.width as u32 || y >= self.height as u32 {
-            return;
-        }
-
-        let copy_width = (max_x - x) as usize;
-        let copy_height = (max_y - y) as usize;
+        let copy_width = (end_x - dst_x) as usize;
+        let copy_height = (end_y - dst_y) as usize;
+        
+        let src_off_x = (dst_x - x) as usize;
+        let src_off_y = (dst_y - y) as usize;
 
         unsafe {
-            let src_base = buffer as *const u8;
-            let dst_base = self.framebuffer as *mut u8;
+            let src_base = buffer as *const u32;
+            let dst_base = self.framebuffer as *mut u32; 
 
             for row in 0..copy_height {
-                let src_row_ptr = src_base.add(row * src_pitch);
-                let dst_row_ptr = dst_base.add((y as usize + row) * dst_pitch + (x as usize) * 4);
+                let src_row_ptr = src_base.add((src_off_y + row) * src_pitch + src_off_x);
+                let dst_row_ptr = dst_base.add((dst_y as usize + row) * dst_pitch + (dst_x as usize));
 
                 for col in 0..copy_width {
-                    let offset = col * 4;
-                    let src_ptr = src_row_ptr.add(offset);
-                    let dst_ptr = dst_row_ptr.add(offset);
+                    let src_pixel = *src_row_ptr.add(col);
+                    let alpha = (src_pixel >> 24) & 0xFF;
 
-                    let src_a = *src_ptr.add(3);
-
-                    if src_a == 255 {
-                        *(dst_ptr as *mut u32) = *(src_ptr as *const u32);
-                    } else if src_a == 0 {
+                    if alpha == 255 {
+                        *dst_row_ptr.add(col) = src_pixel;
+                    } else if alpha == 0 {
                         continue;
                     } else {
-                        let alpha = src_a as u32;
+                        let dst_pixel = *dst_row_ptr.add(col);
+                        
                         let inv_alpha = 255 - alpha;
 
-                        let src_r = *src_ptr as u32;
-                        let src_g = *src_ptr.add(1) as u32;
-                        let src_b = *src_ptr.add(2) as u32;
+                        let src_r = (src_pixel >> 16) & 0xFF;
+                        let src_g = (src_pixel >> 8) & 0xFF;
+                        let src_b = src_pixel & 0xFF;
 
-                        let dst_r = *dst_ptr as u32;
-                        let dst_g = *dst_ptr.add(1) as u32;
-                        let dst_b = *dst_ptr.add(2) as u32;
+                        let dst_r = (dst_pixel >> 16) & 0xFF;
+                        let dst_g = (dst_pixel >> 8) & 0xFF;
+                        let dst_b = dst_pixel & 0xFF;
 
-                        *dst_ptr = ((src_r * alpha + dst_r * inv_alpha) / 255) as u8;
-                        *dst_ptr.add(1) = ((src_g * alpha + dst_g * inv_alpha) / 255) as u8;
-                        *dst_ptr.add(2) = ((src_b * alpha + dst_b * inv_alpha) / 255) as u8;
-                        *dst_ptr.add(3) = 255;
+                        let r = (src_r * alpha + dst_r * inv_alpha) >> 8;
+                        let g = (src_g * alpha + dst_g * inv_alpha) >> 8;
+                        let b = (src_b * alpha + dst_b * inv_alpha) >> 8;
+
+                        *dst_row_ptr.add(col) = (0xFF << 24) | (r << 16) | (g << 8) | b;
                     }
                 }
             }
@@ -257,63 +331,50 @@ impl DisplayServer {
     pub fn draw_mouse(&self, x: u16, y: u16, dragging_window: bool) {
         use crate::drivers::periferics::mouse::{CURSOR_BUFFER, CURSOR_WIDTH, CURSOR_HEIGHT};
 
-        let mut temp_buf: [u32; CURSOR_BUFFER.len()] = [0; CURSOR_BUFFER.len()];
+        /* Hardware cursor disabled by request
+        unsafe {
+            if VIRTIO_ACTIVE {
+                let cx = (x as u32).min(self.width as u32 - 1);
+                let cy = (y as u32).min(self.height as u32 - 1);
+                virtio::cursor::move_cursor(cx, cy);
+                return;
+            }
+        }
+        */
+
         let pitch_bytes = self.pitch as usize;
-        let fb_ptr = self.framebuffer as *mut u8;
-        let db_ptr = self.double_buffer as *const u8;
-        let screen_w = self.width as usize;
-        let screen_h = self.height as usize;
+        let fb_ptr = self.framebuffer as *mut u32; 
+        let db_ptr = self.double_buffer as *const u32; 
+        let width = self.width as usize;
+        let height = self.height as usize;
         let mx = x as usize;
         let my = y as usize;
 
-        // If dragging, read from FB (contains window). Else read from DB (clean).
-        let bg_src = if dragging_window { fb_ptr as *const u8 } else { db_ptr };
+        let bg_src = if dragging_window { fb_ptr as *const u32 } else { db_ptr };
 
         unsafe {
+            let fb_pitch_u32 = pitch_bytes / 4;
+
             for row in 0..CURSOR_HEIGHT {
                 let screen_y = my + row;
-                if screen_y >= screen_h { break; }
+                if screen_y >= height { break; }
 
-                let row_byte_offset = screen_y * pitch_bytes;
+                let fb_row_start = screen_y * fb_pitch_u32 + mx;
+                let cursor_row_start = row * CURSOR_WIDTH;
 
                 for col in 0..CURSOR_WIDTH {
                     let screen_x = mx + col;
-                    if screen_x >= screen_w { break; }
+                    if screen_x >= width { break; }
 
-                    let pixel_offset = row_byte_offset + screen_x * 4;
-
-                    let bg_color = *(bg_src.add(pixel_offset) as *const u32);
-                    let cursor_color = CURSOR_BUFFER[row * CURSOR_WIDTH + col];
-
+                    let cursor_color = CURSOR_BUFFER[cursor_row_start + col];
+                    
                     if cursor_color != 0 {
-                        temp_buf[row * CURSOR_WIDTH + col] = cursor_color;
-                    } else {
-                        temp_buf[row * CURSOR_WIDTH + col] = bg_color;
+                        *fb_ptr.add(fb_row_start + col) = cursor_color;
+                    } else if !dragging_window {
+                        let bg_color = *bg_src.add(fb_row_start + col);
+                        *fb_ptr.add(fb_row_start + col) = bg_color;
                     }
                 }
-            }
-
-            for row in 0..CURSOR_HEIGHT {
-                let screen_y = my + row;
-                if screen_y >= screen_h { break; }
-
-                let fb_offset = screen_y * pitch_bytes + mx * 4;
-
-                let copy_w = if mx + CURSOR_WIDTH > screen_w {
-                    screen_w - mx
-                } else {
-                    CURSOR_WIDTH
-                };
-
-                core::ptr::copy_nonoverlapping(
-                    temp_buf.as_ptr().add(row * CURSOR_WIDTH) as *const u8,
-                    fb_ptr.add(fb_offset),
-                    copy_w * 4
-                );
-            }
-
-            if VIRTIO_ACTIVE {
-                virtio::flush(x as u32, y as u32, CURSOR_WIDTH as u32, CURSOR_HEIGHT as u32, self.width as u32);
             }
         }
     }
