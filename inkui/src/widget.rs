@@ -813,7 +813,7 @@ impl Widget {
                 if let Some(font) = font {
                     if !text.text.is_empty() {
                         // Top alignment for Label
-                        let text_y = geometry.y + geometry.margin + geometry.padding;
+                        let text_y = geometry.y + geometry.margin + geometry.padding + text.size;
                         
                         geometry.content_height = crate::graphics::primitives::draw_text_formatted(
                             framebuffer,

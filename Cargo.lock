@@ -51,6 +51,14 @@ name = "std"
 version = "0.1.0"
 
 [[package]]
+name = "taskbar"
+version = "0.1.0"
+dependencies = [
+ "inkui",
+ "std",
+]
+
+[[package]]
 name = "term"
 version = "0.1.0"
 dependencies = [

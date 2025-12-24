@@ -23,6 +23,9 @@
       <package file="$PROJECT_DIR$/std">
         <feature name="default" enabled="true" />
       </package>
+      <package file="$PROJECT_DIR$/apps/taskbar">
+        <feature name="default" enabled="true" />
+      </package>
       <package file="$PROJECT_DIR$/apps/term">
         <feature name="default" enabled="true" />
       </package>
@@ -53,7 +56,15 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="bf366474-e9be-4fff-b610-ea6d6eb6be02" name="Changes" comment=".">
-      <change beforePath="$PROJECT_DIR$/apps/term/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/apps/term/src/main.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cargo.lock" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.lock" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/inkui/src/widget.rs" beforeDir="false" afterPath="$PROJECT_DIR$/inkui/src/widget.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/src/window_manager/composer.rs" beforeDir="false" afterPath="$PROJECT_DIR$/kernel/src/window_manager/composer.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/make.bat" beforeDir="false" afterPath="$PROJECT_DIR$/make.bat" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tree/sys/bin/term.elf" beforeDir="false" afterPath="$PROJECT_DIR$/tree/sys/bin/term.elf" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tree/user.elf" beforeDir="false" afterPath="$PROJECT_DIR$/tree/user.elf" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/userland/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/userland/src/main.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -237,7 +248,7 @@
       <workItem from="1766343501154" duration="15000" />
       <workItem from="1766386113109" duration="6990000" />
       <workItem from="1766395123007" duration="5965000" />
-      <workItem from="1766560349047" duration="534000" />
+      <workItem from="1766560349047" duration="10341000" />
     </task>
     <task id="LOCAL-00001" summary=".">
       <option name="closed" value="true" />
@@ -487,7 +498,23 @@
       <option name="project" value="LOCAL" />
       <updated>1766560782673</updated>
     </task>
-    <option name="localTasksCounter" value="32" />
+    <task id="LOCAL-00032" summary=".">
+      <option name="closed" value="true" />
+      <created>1766561041281</created>
+      <option name="number" value="00032" />
+      <option name="presentableId" value="LOCAL-00032" />
+      <option name="project" value="LOCAL" />
+      <updated>1766561041281</updated>
+    </task>
+    <task id="LOCAL-00033" summary=".">
+      <option name="closed" value="true" />
+      <created>1766561135448</created>
+      <option name="number" value="00033" />
+      <option name="presentableId" value="LOCAL-00033" />
+      <option name="project" value="LOCAL" />
+      <updated>1766561135448</updated>
+    </task>
+    <option name="localTasksCounter" value="34" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">

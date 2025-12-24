@@ -1,8 +1,10 @@
 [workspace]
 members = ["apps/term",
     "apps/shell",
+    "apps/term",
     "apps/tmap",
     "apps/cat",
+    "apps/taskbar",
     "elfic",
     "inkui",
     "kernel",

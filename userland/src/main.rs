@@ -57,32 +57,15 @@ pub extern "C" fn _start() -> ! {
     win_wallpaper.children.push(root_wallpaper);
     win_wallpaper.show();
 
-    // --- 2. TaskBar Window ---
-    let bar_height = height * 6 / 100; // 6% height
-    let mut win_taskbar = Window::new("TaskBar", width, bar_height);
-    win_taskbar.w_type = Items::Bar; // Register as TaskBar (Top Z-Index)
-    win_taskbar.x = 0;
-    win_taskbar.y = 0; // Hang at top
-    win_taskbar.can_move = false;
-    win_taskbar.can_resize = false;
-
-    let root_taskbar = Widget::frame(100)
-        .width(Size::Relative(100))
-        .height(Size::Relative(100))
-        .background_color(Color::rgb(13, 13, 13)); // #0D0D0D
-
-    win_taskbar.children.push(root_taskbar);
-    win_taskbar.show();
-
     println!("Desktop Environment Initialized.");
+    
+    // Launch Taskbar
+    std::os::exec("@0xE0/sys/bin/taskbar.elf");
     
     // Launch Terminal
     std::os::exec("@0xE0/sys/bin/term.elf");
 
     loop {
-        // In a real shell, we would poll events for both windows here.
-        // win_taskbar.event_loop();
-        // win_wallpaper.event_loop();
         std::os::yield_task();
     }
 }

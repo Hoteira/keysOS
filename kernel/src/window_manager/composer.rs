@@ -91,12 +91,14 @@ impl Composer {
 
     pub fn add_window(&mut self, mut w: Window) -> usize {
         let wtype = w.w_type;
+        
+        // Determine initial Z
         if wtype == Items::Wallpaper {
             w.z = 255;
-        } else if wtype == Items::Bar {
+        } else if wtype == Items::Bar || wtype == Items::Popup {
             w.z = 0;
-        } else if wtype == Items::Popup {
-            w.z = 0;
+        } else {
+            w.z = 1; // Standard windows start behind system bars
         }
 
         w.id = self.check_id(w.buffer as u64);
@@ -112,8 +114,28 @@ impl Composer {
         }
 
         for i in 0..self.windows.len() {
-            if self.windows[i].id != w.id {
-                self.windows[i].z = self.windows[i].z.saturating_add(1);
+            if self.windows[i].id == w.id { continue; }
+
+            match self.windows[i].w_type {
+                Items::Bar | Items::Popup => {
+                    self.windows[i].z = 0; // Keep system bars at top
+                },
+                Items::Null => {},
+                _ => {
+                    // Push other windows back, ensuring they don't conflict with Z=0 or Z=1 (if new window is Z=1)
+                    // If we just added a Z=1 window, we want existing Z=1 to become Z=2.
+                    // If we just added a Z=0 Bar, we want existing Z=1 to stay Z=1?
+                    // Simplify: Just increment standard windows.
+                    
+                    if wtype == Items::Bar || wtype == Items::Popup {
+                        // Adding a Bar (Z=0). Existing windows (>=1) can stay put? 
+                        // Or if they were 0 (invalid state), move to 1.
+                        if self.windows[i].z == 0 { self.windows[i].z = 1; }
+                    } else {
+                         // Adding a Window (Z=1). Existing windows (>=1) must move back.
+                         self.windows[i].z = self.windows[i].z.saturating_add(1);
+                    }
+                }
             }
         }
 
