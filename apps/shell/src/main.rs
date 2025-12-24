@@ -120,7 +120,7 @@ pub extern "C" fn _start() -> ! {
     std::memory::heap::init_heap(heap_ptr as *mut u8, heap_size);
 
     println!("Shell: Started (Pipes & Redirections Enabled)");
-    std::os::file_write(STDOUT_FD, b"\nWelcome to KrakeOS Shell\n> ");
+    std::os::file_write(STDOUT_FD, "\nWelcome to KrakeOS Shell \u{E8F0} \n> ".as_bytes());
 
     let mut cwd = String::from("@0xE0");
     let mut cmd_buffer = String::new();

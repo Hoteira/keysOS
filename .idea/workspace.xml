@@ -57,14 +57,12 @@
   <component name="ChangeListManager">
     <list default="true" id="bf366474-e9be-4fff-b610-ea6d6eb6be02" name="Changes" comment=".">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Cargo.lock" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.lock" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/inkui/src/widget.rs" beforeDir="false" afterPath="$PROJECT_DIR$/inkui/src/widget.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/kernel/src/window_manager/composer.rs" beforeDir="false" afterPath="$PROJECT_DIR$/kernel/src/window_manager/composer.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/make.bat" beforeDir="false" afterPath="$PROJECT_DIR$/make.bat" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/shell/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/apps/shell/src/main.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/taskbar/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/apps/taskbar/src/main.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/term/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/apps/term/src/main.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tree/sys/bin/shell.elf" beforeDir="false" afterPath="$PROJECT_DIR$/tree/sys/bin/shell.elf" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tree/sys/bin/taskbar.elf" beforeDir="false" afterPath="$PROJECT_DIR$/tree/sys/bin/taskbar.elf" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tree/sys/bin/term.elf" beforeDir="false" afterPath="$PROJECT_DIR$/tree/sys/bin/term.elf" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tree/user.elf" beforeDir="false" afterPath="$PROJECT_DIR$/tree/user.elf" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/userland/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/userland/src/main.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -248,7 +246,7 @@
       <workItem from="1766343501154" duration="15000" />
       <workItem from="1766386113109" duration="6990000" />
       <workItem from="1766395123007" duration="5965000" />
-      <workItem from="1766560349047" duration="10341000" />
+      <workItem from="1766560349047" duration="10598000" />
     </task>
     <task id="LOCAL-00001" summary=".">
       <option name="closed" value="true" />
@@ -514,7 +512,15 @@
       <option name="project" value="LOCAL" />
       <updated>1766561135448</updated>
     </task>
-    <option name="localTasksCounter" value="34" />
+    <task id="LOCAL-00034" summary=".">
+      <option name="closed" value="true" />
+      <created>1766571946978</created>
+      <option name="number" value="00034" />
+      <option name="presentableId" value="LOCAL-00034" />
+      <option name="project" value="LOCAL" />
+      <updated>1766571946978</updated>
+    </task>
+    <option name="localTasksCounter" value="35" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
