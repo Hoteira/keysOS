@@ -1,10 +1,10 @@
 use core::sync::atomic::{AtomicU16, Ordering};
 use crate::debugln;
 use crate::drivers::video::virtio;
-use crate::window_manager::display::{DISPLAY_SERVER, VIRTIO_ACTIVE, Color, State, Mouse as DisplayMouse}; 
-use super::composer::{COMPOSER, Composer};
-use super::events::{Event, MouseEvent, ResizeEvent, GLOBAL_EVENT_QUEUE};
-use super::window::{Items, Window};
+use crate::window_manager::display::{DISPLAY_SERVER, VIRTIO_ACTIVE, Color, State}; 
+use super::composer::COMPOSER;
+use super::events::{Event, ResizeEvent, GLOBAL_EVENT_QUEUE};
+use super::window::Items;
 
 pub static mut MOUSE: Mouse = Mouse {
     x: 0,
@@ -166,7 +166,7 @@ impl Mouse {
             }
         }
 
-        let w = unsafe { (*(&raw mut COMPOSER)).find_window(self.x as usize, self.y as usize) };
+        let _w = unsafe { (*(&raw mut COMPOSER)).find_window(self.x as usize, self.y as usize) };
 
         if unsafe { (*(&raw mut RESIZING_WINDOW)).load(Ordering::Relaxed) != 0 } {
             let x_vec = x_rel;
@@ -289,6 +289,23 @@ impl Mouse {
             display_server.copy_to_fb(old_win_x as i32, old_win_y as i32, width as u32, height as u32);
 
             display_server.copy_to_fb_a(width as u32, height as u32, buffer, new_x as i32, new_y as i32);
+
+            // Ensure Bar/Popups stay on top of dragged window
+            for i in 0..composer.windows.len() {
+                let w = &composer.windows[i];
+                match w.w_type {
+                    Items::Bar | Items::Popup => {
+                        display_server.copy_to_fb_a(
+                            w.width as u32,
+                            w.height as u32,
+                            w.buffer,
+                            w.x as i32,
+                            w.y as i32
+                        );
+                    }
+                    _ => {}
+                }
+            }
 
             let old_x_clamped = (old_win_x as i32).max(0) as u32;
             let old_y_clamped = (old_win_y as i32).max(0) as u32;

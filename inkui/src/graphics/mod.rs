@@ -2,7 +2,7 @@ use crate::types::Color;
 
 pub mod primitives;
 
-pub fn draw_pixel(buffer: &mut [u32], width: usize, x: usize, y: usize, mut color: Color) {
+pub fn draw_pixel(buffer: &mut [u32], width: usize, x: usize, y: usize, color: Color) {
     if width == 0 || color.a == 0 { return; }
 
     let idx = y * width + x;

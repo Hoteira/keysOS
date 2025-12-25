@@ -14,7 +14,7 @@ pub mod window_manager;
 extern crate alloc;
 
 use crate::boot::{BootInfo, BOOT_INFO};
-use crate::fs::vfs::FileSystem; 
+ 
 use crate::fs::ext2::fs::Ext2; // Added Ext2 for font loading
 use core::arch::asm;
 use window_manager::display::DISPLAY_SERVER;
@@ -186,7 +186,7 @@ pub extern "C" fn _start(bootinfo_ptr: *const BootInfo) -> ! {
 
             // Set index 4 to 0x01 (WC)
 
-            pat |= (0x01u64 << 32);
+            pat |= 0x01u64 << 32;
 
     
 

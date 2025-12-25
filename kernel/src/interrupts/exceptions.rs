@@ -1,4 +1,3 @@
-use crate::debugln;
 use crate::drivers::port::{inb, outb};
 use crate::drivers::periferics::keyboard::KEYBOARD_BUFFER;
 use crate::window_manager::input::MOUSE;

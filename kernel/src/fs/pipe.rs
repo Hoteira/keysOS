@@ -1,5 +1,4 @@
 use alloc::sync::Arc;
-use alloc::collections::VecDeque;
 use std::sync::Mutex;
 
 // Circular buffer size

@@ -217,8 +217,8 @@ impl Composer {
                 if end_x > start_x && end_y > start_y {
                     for y in start_y..end_y {
                         let row_offset = y as usize * pitch_u32;
-                        let start_ptr = db_ptr.add(row_offset + start_x as usize);
-                        let count = (end_x - start_x) as usize;
+                        let _start_ptr = db_ptr.add(row_offset + start_x as usize);
+                        let _count = (end_x - start_x) as usize;
                         // core::ptr::write_bytes(start_ptr, 0, count * 4);
                     }
                 }

@@ -1,8 +1,5 @@
-use alloc::vec::Vec;
 use core::ptr::{read_volatile, write_volatile};
-use crate::drivers::pci::{PciDevice, PciCapability};
 use crate::memory::pmm;
-use crate::drivers::port::{inl, outl};
 use crate::debugln;
 
 // VirtIO Block Constants
@@ -32,27 +29,27 @@ const STATUS_DRIVER_OK: u8 = 4;
 const STATUS_FEATURES_OK: u8 = 8;
 
 // MMIO Helpers
-unsafe fn read_16(addr: *mut u8) -> u16 {
+unsafe fn read_16(addr: *mut u8) -> u16 { unsafe {
     core::ptr::read_volatile(addr as *mut u16)
-}
-unsafe fn read_32(addr: *mut u8) -> u32 {
+}}
+unsafe fn read_32(addr: *mut u8) -> u32 { unsafe {
     core::ptr::read_volatile(addr as *mut u32)
-}
-unsafe fn read_8(addr: *mut u8) -> u8 {
+}}
+unsafe fn read_8(addr: *mut u8) -> u8 { unsafe {
     core::ptr::read_volatile(addr)
-}
-unsafe fn write_8(addr: *mut u8, val: u8) {
+}}
+unsafe fn write_8(addr: *mut u8, val: u8) { unsafe {
     core::ptr::write_volatile(addr, val);
-}
-unsafe fn write_16(addr: *mut u8, val: u16) {
+}}
+unsafe fn write_16(addr: *mut u8, val: u16) { unsafe {
     core::ptr::write_volatile(addr as *mut u16, val);
-}
-unsafe fn write_32(addr: *mut u8, val: u32) {
+}}
+unsafe fn write_32(addr: *mut u8, val: u32) { unsafe {
     core::ptr::write_volatile(addr as *mut u32, val);
-}
-unsafe fn write_64(addr: *mut u8, val: u64) {
+}}
+unsafe fn write_64(addr: *mut u8, val: u64) { unsafe {
     core::ptr::write_volatile(addr as *mut u64, val);
-}
+}}
 
 // Queue Structs
 #[repr(C, align(16))]
@@ -221,7 +218,7 @@ pub fn is_active() -> bool {
     unsafe { IS_ACTIVE }
 }
 
-unsafe fn setup_queue(common_cfg: *mut u8, index: u16, notify_base: u64, notify_multiplier: u32) {
+unsafe fn setup_queue(common_cfg: *mut u8, index: u16, notify_base: u64, notify_multiplier: u32) { unsafe {
     write_16(common_cfg.add(OFF_QUEUE_SELECT), index);
 
     let max_size = read_16(common_cfg.add(OFF_QUEUE_SIZE));
@@ -235,7 +232,7 @@ unsafe fn setup_queue(common_cfg: *mut u8, index: u16, notify_base: u64, notify_
 
         let desc_addr = frame;
         let avail_addr = desc_addr + 512; // 32 * 16 bytes = 512
-        let used_addr = (avail_addr + 4 + (2 * 32) + 2 + 4095) & !4095; // Align used ring? Spec says align 4 usually, but let's give space. 
+        let _used_addr = (avail_addr + 4 + (2 * 32) + 2 + 4095) & !4095; // Align used ring? Spec says align 4 usually, but let's give space. 
         // avail size: 2+2+(32*2)+2 = 70. 512+70 = 582. 
         // Used ring needs to be aligned.
         let used_addr = desc_addr + 2048; // Safe offset
@@ -260,7 +257,7 @@ unsafe fn setup_queue(common_cfg: *mut u8, index: u16, notify_base: u64, notify_
             notify_addr,
         });
     }
-}
+}}
 
 pub fn read(lba: u64, _disk: u8, target: &mut [u8]) {
     // Note: disk ID ignored for now, assuming single VirtIO block device
@@ -326,7 +323,7 @@ pub fn write(lba: u64, _disk: u8, buffer: &[u8]) {
     }
 }
 
-unsafe fn send_command(out_phys: &[u64], out_lens: &[u32], in_phys: &[u64], in_lens: &[u32]) {
+unsafe fn send_command(out_phys: &[u64], out_lens: &[u32], in_phys: &[u64], in_lens: &[u32]) { unsafe {
     let int_enabled = crate::interrupts::idt::interrupts();
     if int_enabled { core::arch::asm!("cli"); }
 
@@ -398,4 +395,4 @@ unsafe fn send_command(out_phys: &[u64], out_lens: &[u32], in_phys: &[u64], in_l
     }
 
     if int_enabled { core::arch::asm!("sti"); }
-}
+}}

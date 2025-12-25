@@ -135,10 +135,10 @@ pub fn list_devices() {
                 let vendor_id = pci_read(bus, device, function, 0) & 0xFFFF;
 
                 if vendor_id != 0xFFFF {
-                    let device_id = (pci_read(bus, device, function, 0) >> 16) & 0xFFFF;
+                    let _device_id = (pci_read(bus, device, function, 0) >> 16) & 0xFFFF;
                     let class_subclass = pci_read(bus, device, function, 8);
-                    let class_code = (class_subclass >> 24) & 0xFF;
-                    let subclass_code = (class_subclass >> 16) & 0xFF;
+                    let _class_code = (class_subclass >> 24) & 0xFF;
+                    let _subclass_code = (class_subclass >> 16) & 0xFF;
                 }
             }
         }

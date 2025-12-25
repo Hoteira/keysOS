@@ -2,11 +2,10 @@ use alloc::vec::Vec;
 use core::slice;
 use crate::event::Event;
 use crate::widget::{Widget, WidgetId};
-use crate::layout::{Display, FlexDirection};
+use crate::layout::Display;
 use std::graphics::{self, Items};
 use std::os::syscall;
 use alloc::string::String;
-use std::println;
 
 pub struct FrameBuffer {
     pub address: *mut u32,

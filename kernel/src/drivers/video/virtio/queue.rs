@@ -2,7 +2,6 @@ use super::structs::*;
 use super::consts::*;
 use crate::memory::pmm;
 use core::ptr::{read_volatile, write_volatile};
-use std::memory::mmio;
 use std::memory::mmio::{read_16, write_16, write_64};
 use crate::{debugln};
 

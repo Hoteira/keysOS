@@ -1,11 +1,9 @@
 #![no_std]
 #![no_main]
 
-use inkui::{ Window, Widget, Color, Size };
+use inkui::{Window, Widget, Color, Size, Display, Align};
 use std::fs::File;
 extern crate alloc;
-use alloc::vec::Vec;
-use alloc::string::String;
 use alloc::format;
 
 #[panic_handler]
@@ -13,6 +11,17 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
     loop {}
 }
 
+fn open_start_menu(_win: &mut Window, _id: usize) {
+    std::os::print("Start Menu Clicked\n");
+}
+
+fn power_off(_win: &mut Window, _id: usize) {
+    std::os::print("Power Off Clicked\n");
+}
+
+fn wifi_status(_win: &mut Window, _id: usize) {
+    std::os::print("Wifi Clicked\n");
+}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
@@ -21,12 +30,13 @@ pub extern "C" fn _start() -> ! {
     std::memory::heap::init_heap(heap_ptr as *mut u8, heap_size);
 
     let screen_w = std::graphics::get_screen_width();
-    let screen_h = std::graphics::get_screen_height() * 6 / 100;
+    let screen_h = 45; 
 
     let mut win = Window::new("Taskbar", screen_w, screen_h);
     win.x = 0;
     win.y = 0;
 
+    // Load Font
     if let Ok(mut file) = File::open("@0xE0/sys/fonts/CaskaydiaNerd.ttf") {
         let size = file.size();
         let buffer_addr = std::memory::malloc(size);
@@ -38,38 +48,95 @@ pub extern "C" fn _start() -> ! {
     }
 
     // --- GUI SETUP ---
-    let (h, m, _s) = std::os::get_time();
-    let time_str = format!("{:02}:{:02}", h, m);
-    
-    let font_size = 20;
-    let text_width = time_str.len() * font_size * 3 / 5; // Approx width for monospaced
-    let clock_x = (screen_w / 2).saturating_sub(text_width / 2);
-    let clock_y = (screen_h / 2).saturating_sub(font_size / 2);
-
+    // Root container: Absolute Layout (Display::None) allows precise positioning
     let mut root = Widget::frame(1)
         .width(Size::Relative(100))
         .height(Size::Relative(100))
-        .background_color(Color::rgba(0, 0, 0, 255));
+        .background_color(Color::rgba(20, 20, 20, 200)) 
+        .padding(Size::Absolute(0)) // No padding on root, manual placement
+        .set_display(Display::None);
 
-    let clock = Widget::label(2, &time_str)
+    let btn_y = 6;
+    let btn_h = 33;
+
+    // OS Logo (Far Left) - \u{E8F0}
+    // Bigger, White, Less padding
+    let logo_btn = Widget::button(10, "\u{E8F0}")
+        .x(Size::Absolute(12)) // Small left padding
+        .y(Size::Absolute(btn_y))
+        .width(Size::Absolute(48))
+        .height(Size::Absolute(btn_h))
+        .background_color(Color::rgba(0, 0, 0, 0)) 
+        .set_text_color(Color::rgb(255, 255, 255)) // White
+        .set_text_size(32) // Bigger
+        .set_border_radius(Size::Absolute(8))
+        .on_click(open_start_menu);
+    root = root.add_child(logo_btn);
+
+    // Time (HH:MM) - Centered
+    // We calculate absolute position to ensure centering: screen_w/2 - width/2
+    let clock_w = 100;
+    let clock_x = (screen_w / 2).saturating_sub(clock_w / 2);
+    
+    let (h, m, _s) = std::os::get_time();
+    let time_str = format!("{:02}:{:02}", h, m);
+    let clock_lbl = Widget::label(2, &time_str)
         .x(Size::Absolute(clock_x))
-        .y(Size::Absolute(clock_y.saturating_sub(2)))
-        .set_text_size(font_size)
-        .set_text_color(Color::rgb(255, 255, 255))
+        .y(Size::Absolute(btn_y))
+        .width(Size::Absolute(clock_w))
+        .height(Size::Absolute(btn_h))
+        .set_text_size(18)
+        .set_text_color(Color::rgb(255, 255, 255)) // White
+        .set_text_align(Align::Center)
         .background_color(Color::rgba(0, 0, 0, 0));
+    root = root.add_child(clock_lbl);
 
-    root = root.add_child(clock);
+    // Right side icons
+    // Power (Far Right)
+    let power_w = 40;
+    let power_margin_right = 12;
+    let power_btn = Widget::button(12, "\u{F011}")
+        .x(Size::FromRight(power_margin_right)) 
+        .y(Size::Absolute(btn_y))
+        .width(Size::Absolute(power_w))
+        .height(Size::Absolute(btn_h))
+        .background_color(Color::rgba(0, 0, 0, 0))
+        .set_text_color(Color::rgb(255, 100, 100)) // Visible Red
+        .set_text_size(22)
+        .set_border_radius(Size::Absolute(8))
+        .on_click(power_off);
+    root = root.add_child(power_btn);
+
+    // Wifi (Left of Power)
+    let wifi_w = 40;
+    let wifi_gap = 4;
+    let wifi_margin_right = power_margin_right + power_w + wifi_gap;
+    let wifi_btn = Widget::button(11, "\u{F1EB}")
+        .x(Size::FromRight(wifi_margin_right))
+        .y(Size::Absolute(btn_y))
+        .width(Size::Absolute(wifi_w))
+        .height(Size::Absolute(btn_h))
+        .background_color(Color::rgba(0, 0, 0, 0))
+        .set_text_color(Color::rgb(255, 255, 255)) // White
+        .set_text_size(22)
+        .set_border_radius(Size::Absolute(8))
+        .on_click(wifi_status);
+    root = root.add_child(wifi_btn);
 
     win.children.push(root);
-    win.show();
+    win.show(); 
 
     let mut last_m = m;
     let mut ticks = 0;
 
     loop {
         ticks += 1;
-        // Basic throttle: update RTC check roughly once a second (depends on yield/system speed)
-        if ticks % 100 == 0 {
+        
+        // Event loop handles interactive redraws
+        win.event_loop(); 
+
+        // Periodic Clock Update
+        if ticks % 50 == 0 {
             let (h, m, _s) = std::os::get_time();
             if m != last_m {
                 if let Some(w) = win.find_widget_by_id_mut(2) {
@@ -78,12 +145,12 @@ pub extern "C" fn _start() -> ! {
                     }
                 }
                 last_m = m;
+                win.update();
+                win.draw();
+                win.show();
             }
-            win.update();
-            win.draw();
-            win.show();
         }
-
+        
         std::os::yield_task();
     }
 }

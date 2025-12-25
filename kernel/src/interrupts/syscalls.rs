@@ -1,15 +1,13 @@
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::arch::{asm, naked_asm};
+use core::arch::naked_asm;
 use crate::interrupts::task::CPUState;
 use crate::debugln;
 use crate::drivers::periferics::keyboard::KEYBOARD_BUFFER; 
-use crate::memory::paging::{self, PAGE_USER, PAGE_WRITABLE};
 use crate::window_manager::display::DISPLAY_SERVER;
-use crate::fs::vfs::FileSystem;
 use crate::window_manager::composer::COMPOSER;
 use crate::window_manager::input::MOUSE;
-use crate::window_manager::window::{Items, Window};
+use crate::window_manager::window::Window;
 
 // Syscall Numbers
 pub const SYS_READ: u64 = 0;
@@ -364,7 +362,7 @@ pub extern "C" fn syscall_dispatcher(context: &mut CPUState) {
              
              // 1. Resolve Local -> Global
              let global_fd_opt = {
-                 let mut tm = crate::interrupts::task::TASK_MANAGER.int_lock();
+                 let tm = crate::interrupts::task::TASK_MANAGER.int_lock();
                  let current = tm.current_task;
                  if current >= 0 && local_fd < 16 {
                      let g = tm.tasks[current as usize].fd_table[local_fd];
@@ -411,7 +409,7 @@ pub extern "C" fn syscall_dispatcher(context: &mut CPUState) {
 
              // 1. Resolve Local -> Global
              let global_fd_opt = {
-                 let mut tm = crate::interrupts::task::TASK_MANAGER.int_lock();
+                 let tm = crate::interrupts::task::TASK_MANAGER.int_lock();
                  let current = tm.current_task;
                  if current >= 0 && local_fd < 16 {
                      let g = tm.tasks[current as usize].fd_table[local_fd];
@@ -457,7 +455,7 @@ pub extern "C" fn syscall_dispatcher(context: &mut CPUState) {
              if buf_ptr.is_null() { context.rax = u64::MAX; return; }
 
              let global_fd_opt = {
-                 let mut tm = crate::interrupts::task::TASK_MANAGER.int_lock();
+                 let tm = crate::interrupts::task::TASK_MANAGER.int_lock();
                  let current = tm.current_task;
                  if current >= 0 && local_fd < 16 {
                      let g = tm.tasks[current as usize].fd_table[local_fd];
@@ -528,7 +526,7 @@ pub extern "C" fn syscall_dispatcher(context: &mut CPUState) {
              let local_fd = context.rdi as usize;
              
              let global_fd_opt = {
-                 let mut tm = crate::interrupts::task::TASK_MANAGER.int_lock();
+                 let tm = crate::interrupts::task::TASK_MANAGER.int_lock();
                  let current = tm.current_task;
                  if current >= 0 && local_fd < 16 {
                      let g = tm.tasks[current as usize].fd_table[local_fd];
@@ -721,7 +719,7 @@ pub extern "C" fn syscall_dispatcher(context: &mut CPUState) {
              let whence = context.rdx as usize; // 0: SET, 1: CUR, 2: END
              
              let global_fd_opt = {
-                 let mut tm = crate::interrupts::task::TASK_MANAGER.int_lock();
+                 let tm = crate::interrupts::task::TASK_MANAGER.int_lock();
                  let current = tm.current_task;
                  if current >= 0 && local_fd < 16 {
                      let g = tm.tasks[current as usize].fd_table[local_fd];
@@ -779,21 +777,21 @@ pub extern "C" fn syscall_dispatcher(context: &mut CPUState) {
         70 => { // SYS_POLL
             let fds_ptr = context.rdi as *const PollFd;
             let nfds = context.rsi as usize;
-            let timeout = context.rdx as i32; // Ignored for now (always non-blocking or simple yield)
+            let _timeout = context.rdx as i32; // Ignored for now (always non-blocking or simple yield)
 
             if fds_ptr.is_null() || nfds == 0 {
                 context.rax = 0;
                 return;
             }
 
-            let mut poll_fds = unsafe { core::slice::from_raw_parts(fds_ptr, nfds).to_vec() }; // Clone to avoid mutation issues/races if userspace
+            let _poll_fds = unsafe { core::slice::from_raw_parts(fds_ptr, nfds).to_vec() }; // Clone to avoid mutation issues/races if userspace
             // Actually, we need to write back to revents.
             // Let's iterate and write back directly.
             
             let mut ready_count = 0;
             
             {
-                let mut tm = crate::interrupts::task::TASK_MANAGER.int_lock();
+                let tm = crate::interrupts::task::TASK_MANAGER.int_lock();
                 let current = tm.current_task;
                 
                 if current >= 0 {

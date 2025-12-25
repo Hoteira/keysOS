@@ -28,9 +28,9 @@ pub fn init() {
         FRAMEBUFFER.pitch = mode.pitch as usize;
         FRAMEBUFFER.bpp = mode.bpp as usize;
         
-        let fb_width = FRAMEBUFFER.width;
-        let fb_height = FRAMEBUFFER.height;
-        let fb_bpp = FRAMEBUFFER.bpp;
+        let _fb_width = FRAMEBUFFER.width;
+        let _fb_height = FRAMEBUFFER.height;
+        let _fb_bpp = FRAMEBUFFER.bpp;
         
 
     }

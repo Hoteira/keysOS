@@ -1,4 +1,3 @@
-use core::sync::atomic::Ordering;
 use crate::drivers::video::virtio;
 use crate::{debugln, println};
 
@@ -186,8 +185,8 @@ impl DisplayServer {
         let copy_width = (end_x - dst_x) as usize;
         let copy_height = (end_y - dst_y) as usize;
 
-        let src_off_x = (dst_x - x) as usize;
-        let src_off_y = (dst_y - y) as usize;
+        let _src_off_x = (dst_x - x) as usize;
+        let _src_off_y = (dst_y - y) as usize;
 
         let src = self.double_buffer as *const u8;
         let dst = self.framebuffer as *mut u8;
@@ -438,7 +437,7 @@ impl DisplayServer {
                 
                 // 1. Sync RAM (DB -> FB) for this rect
                 for row in 0..sh {
-                    let offset = ((sy + row) as usize * pitch + sx as usize * bpp);
+                    let offset = (sy + row) as usize * pitch + sx as usize * bpp ;
                     core::ptr::copy_nonoverlapping(src.add(offset), dst.add(offset), (sw * bpp as u32) as usize);
                 }
                 

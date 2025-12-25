@@ -1,5 +1,5 @@
 use core::sync::atomic::{AtomicBool, Ordering};
-use crate::boot::{BOOT_INFO, MemoryMapEntry};
+use crate::boot::BOOT_INFO;
 
 
 pub const PAGE_SIZE: u64 = 4096;
@@ -55,7 +55,7 @@ pub fn init() {
     }
 }
 
-unsafe fn add_allocation(pid: u64, start: u64, count: usize) -> bool {
+unsafe fn add_allocation(pid: u64, start: u64, count: usize) -> bool { unsafe {
     let pmm_ptr = &raw mut PMM;
     
     let mut count_used = 0;
@@ -91,9 +91,9 @@ unsafe fn add_allocation(pid: u64, start: u64, count: usize) -> bool {
     };
     
     true
-}
+}}
 
-unsafe fn remove_allocation(start: u64) {
+unsafe fn remove_allocation(start: u64) { unsafe {
     let pmm_ptr = &raw mut PMM;
     let mut found_idx = MAX_ALLOCS;
     let mut count_used = 0;
@@ -115,9 +115,9 @@ unsafe fn remove_allocation(start: u64) {
         }
         (*pmm_ptr).allocations[count_used - 1].used = false;
     }
-}
+}}
 
-unsafe fn is_overlap(start: u64, count: usize) -> bool {
+unsafe fn is_overlap(start: u64, count: usize) -> bool { unsafe {
     let end = start + (count as u64 * PAGE_SIZE);
     let pmm_ptr = &raw mut PMM;
     
@@ -133,9 +133,9 @@ unsafe fn is_overlap(start: u64, count: usize) -> bool {
         }
     }
     false
-}
+}}
 
-unsafe fn is_valid_ram(start: u64, count: usize) -> bool {
+unsafe fn is_valid_ram(start: u64, count: usize) -> bool { unsafe {
     let end = start + (count as u64 * PAGE_SIZE);
     let mmap = (*(&raw mut BOOT_INFO)).mmap;
 
@@ -149,19 +149,19 @@ unsafe fn is_valid_ram(start: u64, count: usize) -> bool {
         }
     }
     false
-}
+}}
 
-unsafe fn lock_pmm() {
+unsafe fn lock_pmm() { unsafe {
     let pmm_ptr = &raw mut PMM;
     while (*pmm_ptr).lock.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
         core::hint::spin_loop();
     }
-}
+}}
 
-unsafe fn unlock_pmm() {
+unsafe fn unlock_pmm() { unsafe {
     let pmm_ptr = &raw mut PMM;
     (*pmm_ptr).lock.store(false, Ordering::Release);
-}
+}}
 
 pub fn allocate_frame(pid: u64) -> Option<u64> {
     allocate_frames(1, pid)

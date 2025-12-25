@@ -800,7 +800,7 @@ impl VfsNode for Ext2Node {
                         // So we MUST read the directory content to check if empty.
                         
                         let mut check_buf = alloc::vec![0u8; fs.block_size as usize];
-                        let mut has_entries = false;
+                        let _has_entries = false;
                         
                         // We need a temporary node to reuse `children` logic or manual scan?
                         // Manual scan of first block is usually enough to see if > 2 entries.
@@ -858,7 +858,7 @@ impl VfsNode for Ext2Node {
 
     fn rename(&mut self, old_name: &str, new_name: &str) -> Result<(), String> {
         // 1. Find inode of old_name
-        let child = self.find(old_name)?;
+        let _child = self.find(old_name)?;
         // We need the inode ID. `Ext2Node` doesn't expose it publicly via VfsNode, 
         // but we are in Ext2Node impl so we can cast if we knew the concrete type of child.
         // Actually, `find` returns `Box<dyn VfsNode>`.

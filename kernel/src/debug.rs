@@ -1,5 +1,5 @@
 use core::fmt;
-use crate::drivers::port::{inb, outb, Port};
+use crate::drivers::port::{inb, Port};
 #[allow(unused_imports)]
 
 pub const COM1: u16 = 0x3F8;

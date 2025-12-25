@@ -1,4 +1,3 @@
-use core::mem;
 
 use crate::debugln;
 
@@ -24,7 +23,7 @@ pub fn setup_cursor(phys_ptr: u64, width: u32, height: u32, x: u32, y: u32) {
         width,
         height,
     };
-    let mut resp_create: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
+    let resp_create: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
 
     send_command_queue(
         0,
@@ -60,7 +59,7 @@ pub fn setup_cursor(phys_ptr: u64, width: u32, height: u32, x: u32, y: u32) {
             padding: 0,
         },
     };
-    let mut resp_attach: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
+    let resp_attach: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
 
     send_command_queue(
         0,
@@ -85,7 +84,7 @@ pub fn setup_cursor(phys_ptr: u64, width: u32, height: u32, x: u32, y: u32) {
         resource_id: cursor_id,
         padding: 0,
     };
-    let mut resp_transfer: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
+    let resp_transfer: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
 
     send_command_queue(
         0,

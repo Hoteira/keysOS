@@ -26,7 +26,7 @@ struct Descriptor {
     offset: u64,
 }
 
-use crate::memory::{pmm, vmm, paging};
+use crate::memory::pmm;
 
 pub fn init_ists() {
     unsafe {

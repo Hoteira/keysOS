@@ -1,8 +1,8 @@
 #[allow(unused_imports)]
 use elfic::{Elf64, Elf64Phdr, ProgramType, ProgramFlags, Elf64Rela, Elf64Sym};
-use crate::memory::{pmm, vmm, paging};
+use crate::memory::{pmm, paging};
 
-unsafe fn virt_to_phys(pml4_phys: u64, virt: u64) -> Option<u64> {
+unsafe fn virt_to_phys(pml4_phys: u64, virt: u64) -> Option<u64> { unsafe {
     let pml4 = &*(pml4_phys as *const paging::PageTable);
     let p4_idx = (virt >> 39) & 0x1FF;
     let p3_entry = pml4.entries[p4_idx as usize];
@@ -34,7 +34,7 @@ unsafe fn virt_to_phys(pml4_phys: u64, virt: u64) -> Option<u64> {
     if page_entry & paging::PAGE_PRESENT == 0 { return None; }
 
     Some((page_entry & 0x000FFFFFFFFFF000) + (virt & 0xFFF))
-}
+}}
 
 pub fn load_elf(data: &[u8], target_pml4_phys: u64, explicit_load_base: u64) -> Result<u64, alloc::string::String> {
 
@@ -60,12 +60,12 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64, explicit_load_base: u64) -> 
     }
 
 
-    for (i, phdr) in elf.program_headers().into_iter().enumerate() {
-        let phdr_p_type = phdr.p_type;
-        let phdr_p_vaddr = phdr.p_vaddr;
-        let phdr_p_memsz = phdr.p_memsz;
+    for (_i, phdr) in elf.program_headers().into_iter().enumerate() {
+        let _phdr_p_type = phdr.p_type;
+        let _phdr_p_vaddr = phdr.p_vaddr;
+        let _phdr_p_memsz = phdr.p_memsz;
         let phdr_p_filesz = phdr.p_filesz;
-        let phdr_p_flags = phdr.p_flags;
+        let _phdr_p_flags = phdr.p_flags;
         let phdr_p_offset = phdr.p_offset;
 
 
@@ -91,7 +91,7 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64, explicit_load_base: u64) -> 
                 if entry_offset_in_segment < phdr_p_filesz {
                     let file_offset = phdr_p_offset + entry_offset_in_segment;
                     unsafe {
-                        let ptr = data.as_ptr().add(file_offset as usize);
+                        let _ptr = data.as_ptr().add(file_offset as usize);
 
                     }
                 } else {
@@ -168,7 +168,7 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64, explicit_load_base: u64) -> 
     let mut dynsym_shdr: Option<&elfic::Elf64Shdr> = None;
     for shdr in elf.section_headers() {
         if shdr.sh_type == 11 { // SHT_DYNSYM
-            let shdr_sh_offset = shdr.sh_offset;
+            let _shdr_sh_offset = shdr.sh_offset;
 
             dynsym_shdr = Some(shdr);
             break;
@@ -178,7 +178,7 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64, explicit_load_base: u64) -> 
     if load_base > 0 {
         for shdr in elf.section_headers() {
             if shdr.sh_type == 4 { // SHT_RELA
-                let shdr_sh_offset_rela = shdr.sh_offset;
+                let _shdr_sh_offset_rela = shdr.sh_offset;
 
                 let num_entries = shdr.sh_size / shdr.sh_entsize;
                 let offset = shdr.sh_offset as usize;
@@ -192,12 +192,12 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64, explicit_load_base: u64) -> 
                     )
                 };
 
-                for (k, rela) in relas.iter().enumerate() {
+                for (_k, rela) in relas.iter().enumerate() {
                     let r_type = rela.get_type();
                     let r_sym = rela.get_symbol();
                     let target_virt = rela.r_offset + load_base;
 
-                    let rela_r_offset = rela.r_offset;
+                    let _rela_r_offset = rela.r_offset;
 
                     let mut val: u64 = 0;
                     let mut found_val = false;
@@ -215,7 +215,7 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64, explicit_load_base: u64) -> 
 
                                     if sym.st_shndx != 0 {
                                         val = sym.st_value + load_base;
-                                        let sym_st_value = sym.st_value;
+                                        let _sym_st_value = sym.st_value;
                                     } else {
                                     }
 
@@ -254,7 +254,7 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64, explicit_load_base: u64) -> 
 
     unsafe {
         if let Some(phys) = virt_to_phys(target_pml4_phys, entry_point) {
-            let code_ptr = phys as *const u8;
+            let _code_ptr = phys as *const u8;
         } else {
 
         }

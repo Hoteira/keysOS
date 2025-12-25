@@ -499,6 +499,13 @@ impl Widget {
         }
     }
 
+    pub fn set_display(mut self, new_display: Display) -> Self {
+        if let Widget::Frame { display, .. } = &mut self {
+            *display = new_display;
+        }
+        self
+    }
+
     pub fn update_layout(
         &mut self,
         parent_x: usize,
@@ -507,7 +514,7 @@ impl Widget {
         parent_height: usize,
         parent_padding: usize,
         _parent_margin: usize,
-        display: &Display,
+        _display: &Display,
     ) {
         let geometry = self.geometry_mut();
 
@@ -579,8 +586,8 @@ impl Widget {
         let _widget_margin = geometry.margin;
 
         match self {
-            Widget::Frame { children, .. } => {
-                match display {
+            Widget::Frame { children, display: frame_display, .. } => {
+                match frame_display {
                     Display::Grid { rows, cols } => {
                         if *rows == 0 || *cols == 0 { return; }
                         let content_width = widget_width.saturating_sub(widget_padding * 2);
@@ -695,7 +702,6 @@ impl Widget {
 }
 
 use titanf::TrueTypeFont;
-use std::println;
 use crate::LinearGradient;
 
 impl Widget {

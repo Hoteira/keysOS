@@ -256,7 +256,7 @@ pub fn draw_square_alpha(
                 // For "inside" fading (pixels < r but > r-1), we modify alpha.
                 
                 if dist > r - 1.0 {
-                    let alpha_factor = (r - dist).clamp(0.0, 1.0);
+                    let _alpha_factor = (r - dist).clamp(0.0, 1.0);
                     // This fades OUT as we get closer to edge? No, alpha should be 1 at r-1, and 0 at r?
                     // Standard AA: Coverage.
                     // If dist = r, coverage 0.5.
@@ -270,7 +270,7 @@ pub fn draw_square_alpha(
                     // Actually, simpler AA:
                     // Alpha = (r + 0.5 - dist).clamp(0.0, 1.0);
                     
-                    let alpha_factor = (r + 1.0 - dist).clamp(0.0, 1.0); // Simple 1px wide AA
+                    let _alpha_factor = (r + 1.0 - dist).clamp(0.0, 1.0); // Simple 1px wide AA
                     // But we are inside `dist <= r`. So `r+1 - dist` is >= 1.0.
                     // Wait. `sqrt` returns float.
                     // If dist is 29.9 (r=30). `31 - 29.9` = 1.1 -> 1.0.

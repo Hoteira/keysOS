@@ -93,7 +93,7 @@ pub fn map_page(virt: u64, phys: u64, flags: u64, target_pml4_phys: Option<u64>)
     }
 }
 
-pub unsafe fn new_user_pml4() -> u64 {
+pub unsafe fn new_user_pml4() -> u64 { unsafe {
 
     (*(&raw const crate::boot::BOOT_INFO)).pml4
-}
+}}

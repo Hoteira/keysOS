@@ -177,7 +177,7 @@ pub fn get_display_info() -> Option<(u32, u32)> {
         ring_idx: 0,
         padding: [0; 3],
     };
-    let mut resp_info: VirtioGpuRespDisplayInfo = unsafe { core::mem::zeroed() };
+    let resp_info: VirtioGpuRespDisplayInfo = unsafe { core::mem::zeroed() };
 
     send_command_queue(
         0,
@@ -206,7 +206,7 @@ pub fn start_gpu(width: u32, height: u32, phys_buf1: u64, phys_buf2: u64) {
         ring_idx: 0,
         padding: [0; 3],
     };
-    let mut resp_info: VirtioGpuRespDisplayInfo = unsafe { core::mem::zeroed() };
+    let resp_info: VirtioGpuRespDisplayInfo = unsafe { core::mem::zeroed() };
 
     send_command_queue(
         0,
@@ -225,7 +225,7 @@ pub fn start_gpu(width: u32, height: u32, phys_buf1: u64, phys_buf2: u64) {
     debugln!("VirtIO GPU: Display Info Type: {:#x}", resp_info.hdr.type_);
 
     // Helper closure to create and attach a resource
-    let mut create_resource = |id: u32, phys: u64| {
+    let create_resource = |id: u32, phys: u64| {
         let req_create = VirtioGpuResourceCreate2d {
             hdr: VirtioGpuCtrlHeader {
                 type_: VIRTIO_GPU_CMD_RESOURCE_CREATE_2D,
@@ -240,7 +240,7 @@ pub fn start_gpu(width: u32, height: u32, phys_buf1: u64, phys_buf2: u64) {
             width,
             height,
         };
-        let mut resp_create: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
+        let resp_create: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
 
         send_command_queue(
             0,
@@ -276,7 +276,7 @@ pub fn start_gpu(width: u32, height: u32, phys_buf1: u64, phys_buf2: u64) {
                 padding: 0,
             },
         };
-        let mut resp_attach: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
+        let resp_attach: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
 
         send_command_queue(
             0,
@@ -306,7 +306,7 @@ pub fn start_gpu(width: u32, height: u32, phys_buf1: u64, phys_buf2: u64) {
         scanout_id: 0,
         resource_id: 1,
     };
-    let mut resp_scanout: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
+    let resp_scanout: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
 
     send_command_queue(
         0,
@@ -335,7 +335,7 @@ pub fn transfer_and_flush(resource_id: u32, width: u32, height: u32) {
         resource_id,
         padding: 0,
     };
-    let mut resp_transfer: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
+    let resp_transfer: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
 
     send_command_queue(
         0,
@@ -358,7 +358,7 @@ pub fn transfer_and_flush(resource_id: u32, width: u32, height: u32) {
         resource_id,
         padding: 0,
     };
-    let mut resp_flush: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
+    let resp_flush: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
 
     send_command_queue(
         0,
@@ -386,7 +386,7 @@ pub fn flush(x: u32, y: u32, width: u32, height: u32, screen_width: u32, resourc
         resource_id,
         padding: 0,
     };
-    let mut resp_transfer: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
+    let resp_transfer: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
 
     send_command_queue(
         0,
@@ -409,7 +409,7 @@ pub fn flush(x: u32, y: u32, width: u32, height: u32, screen_width: u32, resourc
         resource_id,
         padding: 0,
     };
-    let mut resp_flush: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
+    let resp_flush: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
 
     send_command_queue(
         0,
@@ -434,7 +434,7 @@ pub fn set_scanout(resource_id: u32, width: u32, height: u32) {
         scanout_id: 0,
         resource_id,
     };
-    let mut resp_scanout: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
+    let resp_scanout: VirtioGpuCtrlHeader = unsafe { core::mem::zeroed() };
 
     send_command_queue(
         0,

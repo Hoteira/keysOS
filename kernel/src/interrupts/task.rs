@@ -1,13 +1,11 @@
 use core::arch::{asm, naked_asm};
 
-use crate::memory::{paging, pmm, vmm};
+use crate::memory::pmm;
 
 #[allow(dead_code)]
 const STACK_SIZE: u64 = 64 * 1024;
 pub(crate) const MAX_TASKS: usize = 125;
 
-use alloc::vec::Vec;
-use alloc::boxed::Box;
 
 #[derive(Copy, Clone, Debug)]
 #[repr(C, align(16))]
