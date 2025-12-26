@@ -54,7 +54,7 @@ impl Composer {
     pub fn find_window(&mut self, x: usize, y: usize) -> Option<&mut Window> {
         let mx = x as isize;
         let my = y as isize;
-        
+
         for i in 0..self.windows.len() {
             if mx >= self.windows[i].x
                 && mx <= (self.windows[i].x + self.windows[i].width as isize)
@@ -85,23 +85,23 @@ impl Composer {
     pub fn update_tiling(&mut self) {
         let mut tiled_windows = [0usize; 16];
         let mut tiled_count = 0;
-        
+
         let mut bar_height = 0;
         let mut bar_position_top = true;
 
         for i in 0..self.windows.len() {
             match self.windows[i].w_type {
                 Items::Window => {
-                     if tiled_count < 16 {
+                    if tiled_count < 16 {
                         tiled_windows[tiled_count] = self.windows[i].id;
                         tiled_count += 1;
-                     }
+                    }
                 },
                 Items::Bar => {
-                     bar_height = self.windows[i].height;
-                     if self.windows[i].y > 0 {
-                         bar_position_top = false;
-                     }
+                    bar_height = self.windows[i].height;
+                    if self.windows[i].y > 0 {
+                        bar_position_top = false;
+                    }
                 }
                 _ => {}
             }
@@ -111,7 +111,7 @@ impl Composer {
 
         let gap = 5;
         let outer_gap = 5;
-        
+
         let (screen_w, screen_h) = unsafe {
             ((*(&raw mut DISPLAY_SERVER)).width as usize, (*(&raw mut DISPLAY_SERVER)).height as usize)
         };
@@ -133,16 +133,16 @@ impl Composer {
         debugln!("Tiling: Count={}, Work={}x{} @ {},{}", tiled_count, work_w, work_h, work_x, work_y);
 
         let count = tiled_count;
-        
+
         for i in 0..count {
             let wid = tiled_windows[i];
-            
+
             let (tx, ty, tw, th) = if count == 1 {
                 (work_x, work_y, work_w.max(1), work_h.max(1))
             } else {
                 let master_width = (work_w / 2).max(1);
                 let stack_width = work_w.saturating_sub(master_width);
-                
+
                 if i == 0 {
                     let safe_w = (master_width.saturating_sub(gap / 2)).max(1);
                     (work_x, work_y, safe_w, work_h.max(1))
@@ -155,10 +155,10 @@ impl Composer {
                     } else {
                         stack_h
                     };
-                    
+
                     let sx = work_x + master_width + (gap / 2);
                     let sy = work_y + (stack_index * stack_h);
-                    
+
                     let (final_sy, final_h) = if stack_count > 1 {
                         if stack_index == 0 {
                             (sy, this_h.saturating_sub(gap/2))
@@ -171,7 +171,6 @@ impl Composer {
                         (sy, this_h)
                     };
 
-                    // Ensure dimensions are at least 1x1
                     let safe_w = (stack_width.saturating_sub(gap / 2)).max(1);
                     let safe_h = final_h.max(1);
 
@@ -195,35 +194,32 @@ impl Composer {
                 let current_w = self.windows[idx].width;
                 let current_h = self.windows[idx].height;
 
-                // Update Position Only
+                // Update Position AND Size
                 self.windows[idx].x = tx as isize;
                 self.windows[idx].y = ty as isize;
+                self.windows[idx].width = tw;
+                self.windows[idx].height = th;
                 self.windows[idx].can_move = false;
                 self.windows[idx].can_resize = false;
 
-                // Send Event if size TARGET changed
+                // Send Event if size changed
                 if current_w != tw || current_h != th {
                     debugln!("    Size changed ({}x{} -> {}x{}), sending event...", current_w, current_h, tw, th);
-                    debugln!("    Acquiring Event Queue Lock...");
-                    // let mut queue = GLOBAL_EVENT_QUEUE.lock();
-                    debugln!("    Lock acquired. Adding event...");
-                    // queue.add_event(Event::Resize(ResizeEvent {
-                    //     wid: wid as u32,
-                    //     width: tw,
-                    //     height: th,
-                    // }));
-                    debugln!("    Event added. Lock dropping...");
-                    // drop(queue);
-                    debugln!("    Event sent (SKIPPED).");
+                    let mut queue = GLOBAL_EVENT_QUEUE.lock();
+                    queue.add_event(Event::Resize(ResizeEvent {
+                        wid: wid as u32,
+                        width: tw,
+                        height: th,
+                    }));
+                    drop(queue);
+                    debugln!("    Event sent.");
                 }
             } else {
                 debugln!("    Window ID {} not found!", wid);
             }
         }
-        
-        
-        // Batch Redraw: Update the entire tiling workspace once.
-        // This clears the background and redraws all windows at their new positions.
+
+        // Batch Redraw: Update the entire tiling workspace once
         self.update_window_area_rect(work_x as i32, work_y as i32, work_w as u32, work_h as u32);
     }
 
@@ -238,14 +234,13 @@ impl Composer {
 
     pub fn add_window(&mut self, mut w: Window) -> usize {
         let wtype = w.w_type;
-        
-        // Determine initial Z
+
         if wtype == Items::Wallpaper {
             w.z = 255;
         } else if wtype == Items::Bar || wtype == Items::Popup {
             w.z = 0;
         } else {
-            w.z = 1; // Standard windows start behind system bars
+            w.z = 1;
         }
 
         w.id = self.check_id(w.buffer as u64);
@@ -265,14 +260,14 @@ impl Composer {
 
             match self.windows[i].w_type {
                 Items::Bar | Items::Popup => {
-                    self.windows[i].z = 0; // Keep system bars at top
+                    self.windows[i].z = 0;
                 },
                 Items::Null => {},
                 _ => {
                     if wtype == Items::Bar || wtype == Items::Popup {
                         if self.windows[i].z == 0 { self.windows[i].z = 1; }
                     } else {
-                         self.windows[i].z = self.windows[i].z.saturating_add(1);
+                        self.windows[i].z = self.windows[i].z.saturating_add(1);
                     }
                 }
             }
@@ -288,36 +283,39 @@ impl Composer {
     pub fn resize_window(&mut self, w: Window) {
         for i in 0..self.windows.len() {
             if w.id == self.windows[i].id {
-                let old_w = self.windows[i].width;
-                let old_h = self.windows[i].height;
-                
-                // Update Size and Buffer
-                self.windows[i].width = w.width;
-                self.windows[i].height = w.height;
+                // Update buffer pointer (app allocated new buffer)
                 self.windows[i].buffer = w.buffer;
-                
-                // For Tiled windows, IGNORE position from user/app to prevent snapping
+
+                // For non-tiled windows (Bar, Popup, etc), accept the new size
                 if self.windows[i].w_type != Items::Window {
+                    let old_w = self.windows[i].width;
+                    let old_h = self.windows[i].height;
+
+                    self.windows[i].width = w.width;
+                    self.windows[i].height = w.height;
                     self.windows[i].x = w.x;
                     self.windows[i].y = w.y;
                     self.windows[i].can_move = w.can_move;
+
+                    // Redraw the updated area
+                    let current_x = self.windows[i].x;
+                    let current_y = self.windows[i].y;
+                    let u_max_x = (current_x + old_w as isize).max(current_x + w.width as isize);
+                    let u_max_y = (current_y + old_h as isize).max(current_y + w.height as isize);
+
+                    let dirty_w = (u_max_x - current_x).max(0) as u32;
+                    let dirty_h = (u_max_y - current_y).max(0) as u32;
+
+                    if dirty_w > 0 && dirty_h > 0 {
+                        self.update_window_area_rect(current_x as i32, current_y as i32, dirty_w, dirty_h);
+                    }
                 } else {
-                    self.windows[i].can_move = false;
-                    // Keep existing X/Y set by update_tiling
+                    // For tiled windows, trigger a full retile
+                    debugln!("resize_window: Tiled window {}, retriggering tiling", w.id);
+                    self.update_tiling();
                 }
 
-                // Redraw
-                let current_x = self.windows[i].x;
-                let current_y = self.windows[i].y;
-                let u_max_x = (current_x + old_w as isize).max(current_x + w.width as isize);
-                let u_max_y = (current_y + old_h as isize).max(current_y + w.height as isize);
-                
-                let dirty_w = (u_max_x - current_x).max(0) as u32;
-                let dirty_h = (u_max_y - current_y).max(0) as u32;
-
-                if dirty_w > 0 && dirty_h > 0 {
-                    self.update_window_area_rect(current_x as i32, current_y as i32, dirty_w, dirty_h);
-                }
+                break;
             }
         }
     }
@@ -325,8 +323,7 @@ impl Composer {
     pub fn update_window_area_rect(&mut self, dirty_x: i32, dirty_y: i32, dirty_w: u32, dirty_h: u32) {
         unsafe {
             let display_server = &mut *(&raw mut DISPLAY_SERVER);
-            
-            // 1. Clear the area in the double buffer (fill with black or background)
+
             if display_server.double_buffer != 0 {
                 let db_ptr = display_server.double_buffer as *mut u32;
                 let pitch_u32 = (display_server.pitch / 4) as usize;
@@ -343,13 +340,11 @@ impl Composer {
                         let row_offset = y as usize * pitch_u32;
                         let start_ptr = db_ptr.add(row_offset + start_x as usize);
                         let count = (end_x - start_x) as usize;
-                        // Fill with black (0xFF000000 for opaque black) or 0 for transparent/black
                         core::ptr::write_bytes(start_ptr, 0, count);
                     }
                 }
             }
-            
-            // 2. Redraw all windows overlapping this rect
+
             for i in (0..self.windows.len()).rev() {
                 match self.windows[i].w_type {
                     Items::Null => {}
@@ -367,7 +362,6 @@ impl Composer {
                 }
             }
 
-            // 3. Present
             display_server.present_rect(dirty_x, dirty_y, dirty_w, dirty_h);
         }
     }
@@ -420,7 +414,7 @@ impl Composer {
 
         unsafe {
             let display_server = &mut *(&raw mut DISPLAY_SERVER);
-            
+
             if display_server.double_buffer != 0 {
                 let db_ptr = display_server.double_buffer as *mut u32;
                 let pitch_u32 = (display_server.pitch / 4) as usize;
@@ -437,11 +431,10 @@ impl Composer {
                         let row_offset = y as usize * pitch_u32;
                         let _start_ptr = db_ptr.add(row_offset + start_x as usize);
                         let _count = (end_x - start_x) as usize;
-                        // core::ptr::write_bytes(start_ptr, 0, count * 4);
                     }
                 }
             }
-            
+
             for i in (0..self.windows.len()).rev() {
                 match self.windows[i].w_type {
                     Items::Null => {}
