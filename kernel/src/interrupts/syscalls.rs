@@ -27,6 +27,7 @@ pub const SYS_CREATE_FILE: u64 = 71;
 pub const SYS_CREATE_DIR: u64 = 72;
 pub const SYS_REMOVE: u64 = 73;
 pub const SYS_RENAME: u64 = 74;
+pub const SYS_SLEEP: u64 = 76;
 
 static mut NEXT_LOAD_BASE: u64 = 0x08000000; // Start second process at 128MB
 
@@ -1010,6 +1011,17 @@ pub extern "C" fn syscall_dispatcher(context: &mut CPUState) {
              }
         }
         
+        76 => { // SYS_SLEEP
+            let ms = context.rdi;
+            // Approximate: Assume 10ms per tick (100Hz).
+            // This blocks the task in a yield loop.
+            let ticks = (ms + 9) / 10;
+            for _ in 0..ticks {
+                unsafe { core::arch::asm!("int 0x20"); }
+            }
+            context.rax = 0;
+        }
+
         _ => {
             debugln!("[Syscall] Unknown syscall #{}", syscall_num);
             context.rax = u64::MAX;

@@ -65,6 +65,9 @@ pub extern "C" fn _start() -> ! {
     // Launch Terminal
     std::os::exec("@0xE0/sys/bin/term.elf");
 
+    // Launch Hello C
+    std::os::exec("@0xE0/sys/bin/hello_c.elf");
+
     loop {
         std::os::yield_task();
     }

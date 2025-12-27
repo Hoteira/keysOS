@@ -47,6 +47,12 @@ pub fn print(s: &str) {
     }
 }
 
+pub fn sleep(ms: u64) {
+    unsafe {
+        syscall(76, ms, 0, 0);
+    }
+}
+
 pub fn yield_task() {
     unsafe {
         asm!("int 0x20");

@@ -17,6 +17,9 @@
       <package file="$PROJECT_DIR$/kernel">
         <feature name="default" enabled="true" />
       </package>
+      <package file="$PROJECT_DIR$/libs/krake_libc">
+        <feature name="default" enabled="true" />
+      </package>
       <package file="$PROJECT_DIR$/apps/shell">
         <feature name="default" enabled="true" />
       </package>
@@ -56,12 +59,18 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="bf366474-e9be-4fff-b610-ea6d6eb6be02" name="Changes" comment=".">
+      <change beforePath="$PROJECT_DIR$/.cargo/config.toml" beforeDir="false" afterPath="$PROJECT_DIR$/.cargo/config.toml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/term/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/apps/term/src/main.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cargo.lock" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.lock" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kernel/src/interrupts/syscalls.rs" beforeDir="false" afterPath="$PROJECT_DIR$/kernel/src/interrupts/syscalls.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/kernel/src/window_manager/composer.rs" beforeDir="false" afterPath="$PROJECT_DIR$/kernel/src/window_manager/composer.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/kernel/src/window_manager/display.rs" beforeDir="false" afterPath="$PROJECT_DIR$/kernel/src/window_manager/display.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/kernel/src/window_manager/input.rs" beforeDir="false" afterPath="$PROJECT_DIR$/kernel/src/window_manager/input.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tree/sys/bin/term.elf" beforeDir="false" afterPath="$PROJECT_DIR$/tree/sys/bin/term.elf" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/make.bat" beforeDir="false" afterPath="$PROJECT_DIR$/make.bat" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/std/src/os.rs" beforeDir="false" afterPath="$PROJECT_DIR$/std/src/os.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tree/user.elf" beforeDir="false" afterPath="$PROJECT_DIR$/tree/user.elf" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/userland/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/userland/src/main.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -69,7 +78,7 @@
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
   <component name="EmbeddingIndexingInfo">
-    <option name="cachedIndexableFilesCount" value="164" />
+    <option name="cachedIndexableFilesCount" value="172" />
     <option name="fileBasedEmbeddingIndicesEnabled" value="true" />
   </component>
   <component name="ExecutionTargetManager" SELECTED_TARGET="RsBuildProfile:dev" />
@@ -247,7 +256,8 @@
       <workItem from="1766395123007" duration="5965000" />
       <workItem from="1766560349047" duration="10656000" />
       <workItem from="1766687798575" duration="4644000" />
-      <workItem from="1766734285292" duration="20754000" />
+      <workItem from="1766734285292" duration="28579000" />
+      <workItem from="1766851297658" duration="5801000" />
     </task>
     <task id="LOCAL-00001" summary=".">
       <option name="closed" value="true" />
@@ -545,7 +555,15 @@
       <option name="project" value="LOCAL" />
       <updated>1766773584381</updated>
     </task>
-    <option name="localTasksCounter" value="38" />
+    <task id="LOCAL-00038" summary=".">
+      <option name="closed" value="true" />
+      <created>1766828792201</created>
+      <option name="number" value="00038" />
+      <option name="presentableId" value="LOCAL-00038" />
+      <option name="project" value="LOCAL" />
+      <updated>1766828792201</updated>
+    </task>
+    <option name="localTasksCounter" value="39" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">

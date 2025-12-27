@@ -1,10 +1,12 @@
 [workspace]
-members = ["apps/term",
+members = [
+    "apps/term",
     "apps/shell",
     "apps/term",
     "apps/tmap",
     "apps/cat",
     "apps/taskbar",
+    "libs/krake_libc",
     "elfic",
     "inkui",
     "kernel",

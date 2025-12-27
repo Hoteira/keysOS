@@ -1,5 +1,6 @@
 use crate::drivers::video::virtio;
 use crate::{debugln, println};
+use core::arch::x86_64::*;
 
 pub const DEPTH: u8 = 32;
 
@@ -238,50 +239,204 @@ impl DisplayServer {
                 let src_row_ptr = src_base.add((src_off_y + row) * src_pitch + src_off_x);
                 let dst_row_ptr = dst_base.add((dst_y as usize + row) * dst_pitch + (dst_x as usize));
 
-                for col in 0..copy_width {
-                    // Border check
-                    let in_window_x = src_off_x + col;
-                    let in_window_y = src_off_y + row;
-                    let is_border = in_window_x == 0 || in_window_x == (width as usize - 1) ||
-                                    in_window_y == 0 || in_window_y == (height as usize - 1);
+                let is_top_or_bottom = (src_off_y + row) == 0 || (src_off_y + row) == (height as usize - 1);
 
-                    if is_border {
-                        if let Some(color) = border_color {
-                            *dst_row_ptr.add(col) = color;
-                            continue;
+                if is_top_or_bottom {
+                    // Scalar fallback for border rows
+                    for col in 0..copy_width {
+                        let in_window_x = src_off_x + col;
+                        let is_border = in_window_x == 0 || in_window_x == (width as usize - 1) || is_top_or_bottom;
+                        
+                        if is_border {
+                            if let Some(color) = border_color {
+                                *dst_row_ptr.add(col) = color;
+                                continue;
+                            }
+                        }
+
+                        // Normal blending
+                        let src_pixel = *src_row_ptr.add(col);
+                        let alpha = (src_pixel >> 24) & 0xFF;
+                        if alpha == 255 {
+                            *dst_row_ptr.add(col) = src_pixel;
+                        } else if alpha != 0 {
+                             let dst_pixel = *dst_row_ptr.add(col);
+                             let inv_alpha = 255 - alpha;
+                             let r = (((src_pixel >> 16) & 0xFF) * alpha + ((dst_pixel >> 16) & 0xFF) * inv_alpha) >> 8;
+                             let g = (((src_pixel >> 8) & 0xFF) * alpha + ((dst_pixel >> 8) & 0xFF) * inv_alpha) >> 8;
+                             let b = ((src_pixel & 0xFF) * alpha + (dst_pixel & 0xFF) * inv_alpha) >> 8;
+                             *dst_row_ptr.add(col) = (0xFF << 24) | (r << 16) | (g << 8) | b;
                         }
                     }
+                    continue;
+                }
 
-                    let src_pixel = *src_row_ptr.add(col);
-                    let alpha = (src_pixel >> 24) & 0xFF;
+                // Middle rows: Left border -> SIMD Body -> Right border
+                let mut col = 0;
 
-                    if alpha == 255 {
-                        *dst_row_ptr.add(col) = src_pixel;
-                    } else if alpha == 0 {
-                        continue;
-                    } else {
-                        let dst_pixel = *dst_row_ptr.add(col);
-
-                        let inv_alpha = 255 - alpha;
-
-                        let src_r = (src_pixel >> 16) & 0xFF;
-                        let src_g = (src_pixel >> 8) & 0xFF;
-                        let src_b = src_pixel & 0xFF;
-
-                        let dst_r = (dst_pixel >> 16) & 0xFF;
-                        let dst_g = (dst_pixel >> 8) & 0xFF;
-                        let dst_b = dst_pixel & 0xFF;
-
-                        let r = (src_r * alpha + dst_r * inv_alpha) >> 8;
-                        let g = (src_g * alpha + dst_g * inv_alpha) >> 8;
-                        let b = (src_b * alpha + dst_b * inv_alpha) >> 8;
-
-                        *dst_row_ptr.add(col) = (0xFF << 24) | (r << 16) | (g << 8) | b;
+                // 1. Left Border / Scalar Start
+                if copy_width > 0 {
+                    let in_window_x = src_off_x + col;
+                    if in_window_x == 0 {
+                        if let Some(color) = border_color {
+                            *dst_row_ptr.add(col) = color;
+                        } else {
+                            // Blend if no border color (unlikely for border pixel but safe)
+                            let src_pixel = *src_row_ptr.add(col);
+                             let alpha = (src_pixel >> 24) & 0xFF;
+                             if alpha == 255 { *dst_row_ptr.add(col) = src_pixel; }
+                             else if alpha != 0 {
+                                 let dst_pixel = *dst_row_ptr.add(col);
+                                 let inv_alpha = 255 - alpha;
+                                 let r = (((src_pixel >> 16) & 0xFF) * alpha + ((dst_pixel >> 16) & 0xFF) * inv_alpha) >> 8;
+                                 let g = (((src_pixel >> 8) & 0xFF) * alpha + ((dst_pixel >> 8) & 0xFF) * inv_alpha) >> 8;
+                                 let b = ((src_pixel & 0xFF) * alpha + (dst_pixel & 0xFF) * inv_alpha) >> 8;
+                                 *dst_row_ptr.add(col) = (0xFF << 24) | (r << 16) | (g << 8) | b;
+                             }
+                        }
+                        col += 1;
                     }
+                }
+
+                // 2. SIMD Loop
+                let simd_end = if copy_width >= 4 { copy_width - 3 } else { 0 }; // Leave room for right border/tail
+                
+                // Ensure alignment or just use loadu (unaligned) which is fine on modern x64
+                while col < simd_end {
+                    // Check right border condition ahead of time? 
+                    // src_off_x + col + 3 < width - 1 is guaranteed by simd_end logic if width is handled correctly.
+                    // Actually, let's just run SIMD until the last few pixels.
+                    // Note: If src_off_x + col + i == width - 1, it's a border. 
+                    // So we must stop BEFORE the right edge of the window.
+                    
+                    if (src_off_x + col + 4) >= (width as usize) {
+                         break; // Too close to right border
+                    }
+
+                    let src_vec = _mm_loadu_si128(src_row_ptr.add(col) as *const __m128i);
+                    let alphas = _mm_srli_epi32(src_vec, 24); // Shift alpha to LSB
+
+                    // Optimization: check if all opaque (alpha == 255)
+                    // _mm_movemask_epi8 returns bits of bytes that have MSB set. Not useful for exact 255 check directly without compare.
+                    // Compare alphas with 255.
+                    let all_opaque_mask = _mm_cmpeq_epi32(alphas, _mm_set1_epi32(255));
+                    let mask_bits = _mm_movemask_epi8(all_opaque_mask);
+                    
+                    if mask_bits == 0xFFFF {
+                        _mm_storeu_si128(dst_row_ptr.add(col) as *mut __m128i, src_vec);
+                        col += 4;
+                        continue;
+                    }
+                    
+                    // Optimization: check if all transparent (alpha == 0)
+                    let all_transp_mask = _mm_cmpeq_epi32(alphas, _mm_setzero_si128());
+                     let t_mask_bits = _mm_movemask_epi8(all_transp_mask);
+                    if t_mask_bits == 0xFFFF {
+                        col += 4;
+                        continue;
+                    }
+
+                    // Blending
+                    // Unpack to u16. Lo = P0, P1. Hi = P2, P3.
+                    let zero = _mm_setzero_si128();
+                    let src_lo = _mm_unpacklo_epi8(src_vec, zero);
+                    let src_hi = _mm_unpackhi_epi8(src_vec, zero);
+
+                    // We need alpha repeated for each channel in u16
+                    // alphas has: 00 00 00 A0 | 00 00 00 A1 ...
+                    // We want:    00 A0 00 A0 | 00 A0 00 A0 ...
+                    // Shuffle is tricky. Easier to unpack alphas just like pixels.
+                    // Or reuse existing logic.
+                    
+                    // Let's create alpha vector 0..255
+                    // alphas is 32-bit integers.
+                    let alpha_lo_32 = _mm_unpacklo_epi32(alphas, alphas); // A0 A0 A1 A1
+                    let alpha_lo_16 = _mm_or_si128(alpha_lo_32, _mm_slli_epi32(alpha_lo_32, 16));
+                    let alpha_hi_32 = _mm_unpackhi_epi32(alphas, alphas);
+                    let alpha_hi_16 = _mm_or_si128(alpha_hi_32, _mm_slli_epi32(alpha_hi_32, 16));
+                    
+                    // Load dest
+                    let dst_vec = _mm_loadu_si128(dst_row_ptr.add(col) as *const __m128i);
+                    let dst_lo = _mm_unpacklo_epi8(dst_vec, zero);
+                    let dst_hi = _mm_unpackhi_epi8(dst_vec, zero);
+                    
+                    // Inv Alpha = 255 - Alpha
+                    let const_255 = _mm_set1_epi16(255);
+                    let inv_alpha_lo = _mm_sub_epi16(const_255, alpha_lo_16);
+                    let inv_alpha_hi = _mm_sub_epi16(const_255, alpha_hi_16);
+
+                    // Multiply
+                    let src_lo_mul = _mm_mullo_epi16(src_lo, alpha_lo_16);
+                    let src_hi_mul = _mm_mullo_epi16(src_hi, alpha_hi_16);
+                    let dst_lo_mul = _mm_mullo_epi16(dst_lo, inv_alpha_lo);
+                    let dst_hi_mul = _mm_mullo_epi16(dst_hi, inv_alpha_hi);
+                    
+                    // Add
+                    let res_lo = _mm_add_epi16(src_lo_mul, dst_lo_mul);
+                    let res_hi = _mm_add_epi16(src_hi_mul, dst_hi_mul);
+                    
+                    // Shift >> 8
+                    let res_lo_shifted = _mm_srli_epi16(res_lo, 8);
+                    let res_hi_shifted = _mm_srli_epi16(res_hi, 8);
+                    
+                    // Pack back to u8
+                    let result = _mm_packus_epi16(res_lo_shifted, res_hi_shifted);
+                    
+                    // Force Alpha to 255 (Opaque) because output of window composition is opaque
+                    // Currently alpha channel calculation might result in non-255 if src alpha was < 255.
+                    // But we want the framebuffer to be 255 alpha usually. 
+                    // Let's set alpha bits to 1.
+                    // Or just leave it? Display hardware usually ignores alpha or expects 255.
+                    // Let's OR with 0xFF000000 mask.
+                    let alpha_mask = _mm_set1_epi32(0xFF000000u32 as i32);
+                    let final_res = _mm_or_si128(result, alpha_mask);
+
+                    _mm_storeu_si128(dst_row_ptr.add(col) as *mut __m128i, final_res);
+                    col += 4;
+                }
+
+                // 3. Right Border / Tail
+                while col < copy_width {
+                    let in_window_x = src_off_x + col;
+                    let is_border = in_window_x == 0 || in_window_x == (width as usize - 1);
+
+                    if is_border {
+                         if let Some(color) = border_color {
+                            *dst_row_ptr.add(col) = color;
+                        } else {
+                             // Fallback blend
+                             let src_pixel = *src_row_ptr.add(col);
+                             let alpha = (src_pixel >> 24) & 0xFF;
+                             if alpha == 255 { *dst_row_ptr.add(col) = src_pixel; }
+                             else if alpha != 0 {
+                                 let dst_pixel = *dst_row_ptr.add(col);
+                                 let inv_alpha = 255 - alpha;
+                                 let r = (((src_pixel >> 16) & 0xFF) * alpha + ((dst_pixel >> 16) & 0xFF) * inv_alpha) >> 8;
+                                 let g = (((src_pixel >> 8) & 0xFF) * alpha + ((dst_pixel >> 8) & 0xFF) * inv_alpha) >> 8;
+                                 let b = ((src_pixel & 0xFF) * alpha + (dst_pixel & 0xFF) * inv_alpha) >> 8;
+                                 *dst_row_ptr.add(col) = (0xFF << 24) | (r << 16) | (g << 8) | b;
+                             }
+                        }
+                    } else {
+                         let src_pixel = *src_row_ptr.add(col);
+                         let alpha = (src_pixel >> 24) & 0xFF;
+                         if alpha == 255 {
+                             *dst_row_ptr.add(col) = src_pixel;
+                         } else if alpha != 0 {
+                             let dst_pixel = *dst_row_ptr.add(col);
+                             let inv_alpha = 255 - alpha;
+                             let r = (((src_pixel >> 16) & 0xFF) * alpha + ((dst_pixel >> 16) & 0xFF) * inv_alpha) >> 8;
+                             let g = (((src_pixel >> 8) & 0xFF) * alpha + ((dst_pixel >> 8) & 0xFF) * inv_alpha) >> 8;
+                             let b = ((src_pixel & 0xFF) * alpha + (dst_pixel & 0xFF) * inv_alpha) >> 8;
+                             *dst_row_ptr.add(col) = (0xFF << 24) | (r << 16) | (g << 8) | b;
+                         }
+                    }
+                    col += 1;
                 }
             }
         }
     }
+
 
     pub fn copy_to_db_clipped(&self, width: u32, height: u32, buffer: usize, x: i32, y: i32, clip_x: i32, clip_y: i32, clip_w: u32, clip_h: u32, border_color: Option<u32>) {
         let dst_pitch = self.pitch as usize / 4; // Pitch in u32
@@ -343,6 +498,245 @@ impl DisplayServer {
 
                 // Dest pointer:   db[ (dst_y + row) * pitch + dst_x ]
                 // intersect_y is absolute screen Y
+                let dst_row_ptr = dst_base.add((intersect_y as usize + row) * dst_pitch + (intersect_x as usize));
+
+                let is_top_or_bottom = (src_off_y + row) == 0 || (src_off_y + row) == (height as usize - 1);
+
+                if is_top_or_bottom {
+                    // Scalar fallback for border rows
+                    for col in 0..copy_width {
+                        let in_window_x = src_off_x + col;
+                        let is_border = in_window_x == 0 || in_window_x == (width as usize - 1) || is_top_or_bottom;
+                        
+                        if is_border {
+                            if let Some(color) = border_color {
+                                *dst_row_ptr.add(col) = color;
+                                continue;
+                            }
+                        }
+
+                        // Normal blending
+                        let src_pixel = *src_row_ptr.add(col);
+                        let alpha = (src_pixel >> 24) & 0xFF;
+                        if alpha == 255 {
+                            *dst_row_ptr.add(col) = src_pixel;
+                        } else if alpha != 0 {
+                             let dst_pixel = *dst_row_ptr.add(col);
+                             let inv_alpha = 255 - alpha;
+                             let r = (((src_pixel >> 16) & 0xFF) * alpha + ((dst_pixel >> 16) & 0xFF) * inv_alpha) >> 8;
+                             let g = (((src_pixel >> 8) & 0xFF) * alpha + ((dst_pixel >> 8) & 0xFF) * inv_alpha) >> 8;
+                             let b = ((src_pixel & 0xFF) * alpha + (dst_pixel & 0xFF) * inv_alpha) >> 8;
+                             *dst_row_ptr.add(col) = (0xFF << 24) | (r << 16) | (g << 8) | b;
+                        }
+                    }
+                    continue;
+                }
+
+                // Middle rows: Left border -> SIMD Body -> Right border
+                let mut col = 0;
+
+                // 1. Left Border / Scalar Start
+                if copy_width > 0 {
+                    let in_window_x = src_off_x + col;
+                    if in_window_x == 0 {
+                        if let Some(color) = border_color {
+                            *dst_row_ptr.add(col) = color;
+                        } else {
+                            // Blend if no border color (unlikely for border pixel but safe)
+                            let src_pixel = *src_row_ptr.add(col);
+                             let alpha = (src_pixel >> 24) & 0xFF;
+                             if alpha == 255 { *dst_row_ptr.add(col) = src_pixel; }
+                             else if alpha != 0 {
+                                 let dst_pixel = *dst_row_ptr.add(col);
+                                 let inv_alpha = 255 - alpha;
+                                 let r = (((src_pixel >> 16) & 0xFF) * alpha + ((dst_pixel >> 16) & 0xFF) * inv_alpha) >> 8;
+                                 let g = (((src_pixel >> 8) & 0xFF) * alpha + ((dst_pixel >> 8) & 0xFF) * inv_alpha) >> 8;
+                                 let b = ((src_pixel & 0xFF) * alpha + (dst_pixel & 0xFF) * inv_alpha) >> 8;
+                                 *dst_row_ptr.add(col) = (0xFF << 24) | (r << 16) | (g << 8) | b;
+                             }
+                        }
+                        col += 1;
+                    }
+                }
+
+                // 2. SIMD Loop
+                let simd_end = if copy_width >= 4 { copy_width - 3 } else { 0 }; // Leave room for right border/tail
+                
+                // Ensure alignment or just use loadu (unaligned) which is fine on modern x64
+                while col < simd_end {
+                    // Check right border condition ahead of time? 
+                    // src_off_x + col + 3 < width - 1 is guaranteed by simd_end logic if width is handled correctly.
+                    // Actually, let's just run SIMD until the last few pixels.
+                    // Note: If src_off_x + col + i == width - 1, it's a border. 
+                    // So we must stop BEFORE the right edge of the window.
+                    
+                    if (src_off_x + col + 4) >= (width as usize) {
+                         break; // Too close to right border
+                    }
+
+                    let src_vec = _mm_loadu_si128(src_row_ptr.add(col) as *const __m128i);
+                    let alphas = _mm_srli_epi32(src_vec, 24); // Shift alpha to LSB
+
+                    // Optimization: check if all opaque (alpha == 255)
+                    // _mm_movemask_epi8 returns bits of bytes that have MSB set. Not useful for exact 255 check directly without compare.
+                    // Compare alphas with 255.
+                    let all_opaque_mask = _mm_cmpeq_epi32(alphas, _mm_set1_epi32(255));
+                    let mask_bits = _mm_movemask_epi8(all_opaque_mask);
+                    
+                    if mask_bits == 0xFFFF {
+                        _mm_storeu_si128(dst_row_ptr.add(col) as *mut __m128i, src_vec);
+                        col += 4;
+                        continue;
+                    }
+                    
+                    // Optimization: check if all transparent (alpha == 0)
+                    let all_transp_mask = _mm_cmpeq_epi32(alphas, _mm_setzero_si128());
+                     let t_mask_bits = _mm_movemask_epi8(all_transp_mask);
+                    if t_mask_bits == 0xFFFF {
+                        col += 4;
+                        continue;
+                    }
+
+                    // Blending
+                    // Unpack to u16. Lo = P0, P1. Hi = P2, P3.
+                    let zero = _mm_setzero_si128();
+                    let src_lo = _mm_unpacklo_epi8(src_vec, zero);
+                    let src_hi = _mm_unpackhi_epi8(src_vec, zero);
+
+                    // We need alpha repeated for each channel in u16
+                    // alphas has: 00 00 00 A0 | 00 00 00 A1 ...
+                    // We want:    00 A0 00 A0 | 00 A0 00 A0 ...
+                    // Shuffle is tricky. Easier to unpack alphas just like pixels.
+                    // Or reuse existing logic.
+                    
+                    // Let's create alpha vector 0..255
+                    // alphas is 32-bit integers.
+                    let alpha_lo_32 = _mm_unpacklo_epi32(alphas, alphas); // A0 A0 A1 A1
+                    let alpha_lo_16 = _mm_or_si128(alpha_lo_32, _mm_slli_epi32(alpha_lo_32, 16));
+                    let alpha_hi_32 = _mm_unpackhi_epi32(alphas, alphas);
+                    let alpha_hi_16 = _mm_or_si128(alpha_hi_32, _mm_slli_epi32(alpha_hi_32, 16));
+                    
+                    // Load dest
+                    let dst_vec = _mm_loadu_si128(dst_row_ptr.add(col) as *const __m128i);
+                    let dst_lo = _mm_unpacklo_epi8(dst_vec, zero);
+                    let dst_hi = _mm_unpackhi_epi8(dst_vec, zero);
+                    
+                    // Inv Alpha = 255 - Alpha
+                    let const_255 = _mm_set1_epi16(255);
+                    let inv_alpha_lo = _mm_sub_epi16(const_255, alpha_lo_16);
+                    let inv_alpha_hi = _mm_sub_epi16(const_255, alpha_hi_16);
+
+                    // Multiply
+                    let src_lo_mul = _mm_mullo_epi16(src_lo, alpha_lo_16);
+                    let src_hi_mul = _mm_mullo_epi16(src_hi, alpha_hi_16);
+                    let dst_lo_mul = _mm_mullo_epi16(dst_lo, inv_alpha_lo);
+                    let dst_hi_mul = _mm_mullo_epi16(dst_hi, inv_alpha_hi);
+                    
+                    // Add
+                    let res_lo = _mm_add_epi16(src_lo_mul, dst_lo_mul);
+                    let res_hi = _mm_add_epi16(src_hi_mul, dst_hi_mul);
+                    
+                    // Shift >> 8
+                    let res_lo_shifted = _mm_srli_epi16(res_lo, 8);
+                    let res_hi_shifted = _mm_srli_epi16(res_hi, 8);
+                    
+                    // Pack back to u8
+                    let result = _mm_packus_epi16(res_lo_shifted, res_hi_shifted);
+                    
+                    // Force Alpha to 255 (Opaque) because output of window composition is opaque
+                    // Currently alpha channel calculation might result in non-255 if src alpha was < 255.
+                    // But we want the framebuffer to be 255 alpha usually. 
+                    // Let's set alpha bits to 1.
+                    // Or just leave it? Display hardware usually ignores alpha or expects 255.
+                    // Let's OR with 0xFF000000 mask.
+                    let alpha_mask = _mm_set1_epi32(0xFF000000u32 as i32);
+                    let final_res = _mm_or_si128(result, alpha_mask);
+
+                    _mm_storeu_si128(dst_row_ptr.add(col) as *mut __m128i, final_res);
+                    col += 4;
+                }
+
+                // 3. Right Border / Tail
+                while col < copy_width {
+                    let in_window_x = src_off_x + col;
+                    let is_border = in_window_x == 0 || in_window_x == (width as usize - 1);
+
+                    if is_border {
+                         if let Some(color) = border_color {
+                            *dst_row_ptr.add(col) = color;
+                        } else {
+                             // Fallback blend
+                             let src_pixel = *src_row_ptr.add(col);
+                             let alpha = (src_pixel >> 24) & 0xFF;
+                             if alpha == 255 { *dst_row_ptr.add(col) = src_pixel; }
+                             else if alpha != 0 {
+                                 let dst_pixel = *dst_row_ptr.add(col);
+                                 let inv_alpha = 255 - alpha;
+                                 let r = (((src_pixel >> 16) & 0xFF) * alpha + ((dst_pixel >> 16) & 0xFF) * inv_alpha) >> 8;
+                                 let g = (((src_pixel >> 8) & 0xFF) * alpha + ((dst_pixel >> 8) & 0xFF) * inv_alpha) >> 8;
+                                 let b = ((src_pixel & 0xFF) * alpha + (dst_pixel & 0xFF) * inv_alpha) >> 8;
+                                 *dst_row_ptr.add(col) = (0xFF << 24) | (r << 16) | (g << 8) | b;
+                             }
+                        }
+                    } else {
+                         let src_pixel = *src_row_ptr.add(col);
+                         let alpha = (src_pixel >> 24) & 0xFF;
+                         if alpha == 255 {
+                             *dst_row_ptr.add(col) = src_pixel;
+                         } else if alpha != 0 {
+                             let dst_pixel = *dst_row_ptr.add(col);
+                             let inv_alpha = 255 - alpha;
+                             let r = (((src_pixel >> 16) & 0xFF) * alpha + ((dst_pixel >> 16) & 0xFF) * inv_alpha) >> 8;
+                             let g = (((src_pixel >> 8) & 0xFF) * alpha + ((dst_pixel >> 8) & 0xFF) * inv_alpha) >> 8;
+                             let b = ((src_pixel & 0xFF) * alpha + (dst_pixel & 0xFF) * inv_alpha) >> 8;
+                             *dst_row_ptr.add(col) = (0xFF << 24) | (r << 16) | (g << 8) | b;
+                         }
+                    }
+                    col += 1;
+                }
+            }
+        }
+    }
+
+    pub fn copy_to_fb_clipped(&self, width: u32, height: u32, buffer: usize, x: i32, y: i32, clip_x: i32, clip_y: i32, clip_w: u32, clip_h: u32, border_color: Option<u32>) {
+        let dst_pitch = self.pitch as usize / 4;
+        let src_pitch = width as usize;
+        let screen_w = self.width as i32;
+        let screen_h = self.height as i32;
+
+        let win_x = x;
+        let win_y = y;
+        let win_w = width as i32;
+        let win_h = height as i32;
+
+        let cx = clip_x;
+        let cy = clip_y;
+        let cw = clip_w as i32;
+        let ch = clip_h as i32;
+
+        let intersect_x = win_x.max(cx).max(0);
+        let intersect_y = win_y.max(cy).max(0);
+        let intersect_end_x = (win_x + win_w).min(cx + cw).min(screen_w);
+        let intersect_end_y = (win_y + win_h).min(cy + ch).min(screen_h);
+
+        if buffer == 0 { return; }
+
+        if intersect_end_x <= intersect_x || intersect_end_y <= intersect_y {
+            return;
+        }
+
+        let copy_width = (intersect_end_x - intersect_x) as usize;
+        let copy_height = (intersect_end_y - intersect_y) as usize;
+
+        let src_off_x = (intersect_x - win_x) as usize;
+        let src_off_y = (intersect_y - win_y) as usize;
+
+        unsafe {
+            let src_base = buffer as *const u32;
+            let dst_base = self.framebuffer as *mut u32;
+
+            for row in 0..copy_height {
+                let src_row_ptr = src_base.add((src_off_y + row) * src_pitch + src_off_x);
                 let dst_row_ptr = dst_base.add((intersect_y as usize + row) * dst_pitch + (intersect_x as usize));
 
                 for col in 0..copy_width {

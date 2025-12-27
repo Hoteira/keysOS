@@ -110,183 +110,22 @@ impl Composer {
     }
 
     pub fn update_tiling(&mut self) {
-        let mut tiled_windows = [0usize; 16];
-        let mut tiled_count = 0;
-
-        let mut bar_height = 0;
-        let mut bar_position_top = true;
-
-        for i in 0..self.windows.len() {
-            match self.windows[i].w_type {
-                Items::Window => {
-                    if tiled_count < 16 {
-                        tiled_windows[tiled_count] = self.windows[i].id;
-                        tiled_count += 1;
-                    }
-                },
-                Items::Bar => {
-                    bar_height = self.windows[i].height;
-                    if self.windows[i].y > 0 {
-                        bar_position_top = false;
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        if tiled_count == 0 { return; }
-
-        let gap = 5;
-        let outer_gap = 5;
+        // Tiling is disabled. This function now ensures windows are movable
+        // and triggers a workspace redraw.
 
         let (screen_w, screen_h) = unsafe {
             ((*(&raw mut DISPLAY_SERVER)).width as usize, (*(&raw mut DISPLAY_SERVER)).height as usize)
         };
 
-        let mut work_x = outer_gap;
-        let mut work_y = outer_gap;
-        let mut work_w = screen_w.saturating_sub(outer_gap * 2);
-        let mut work_h = screen_h.saturating_sub(outer_gap * 2);
-
-        if bar_height > 0 {
-            if bar_position_top {
-                work_y += bar_height;
-                work_h = work_h.saturating_sub(bar_height);
-            } else {
-                work_h = work_h.saturating_sub(bar_height);
+        for i in 0..self.windows.len() {
+            if self.windows[i].w_type == Items::Window {
+                self.windows[i].can_move = true;
+                self.windows[i].can_resize = true;
             }
         }
 
-        // debugln!("Tiling: Count={}, Work={}x{} @ {},{}", tiled_count, work_w, work_h, work_x, work_y);
-
-        let count = tiled_count;
-
-        // Dirty rect tracking
-        let mut min_x: i32 = 100000;
-        let mut min_y: i32 = 100000;
-        let mut max_x: i32 = -100000;
-        let mut max_y: i32 = -100000;
-        let mut any_change = false;
-
-        for i in 0..count {
-            let wid = tiled_windows[i];
-
-            let (tx, ty, tw, th) = if count == 1 {
-                (work_x, work_y, work_w.max(1), work_h.max(1))
-            } else {
-                let master_width = (work_w / 2).max(1);
-                let stack_width = work_w.saturating_sub(master_width);
-
-                if i == 0 {
-                    let safe_w = (master_width.saturating_sub(gap / 2)).max(1);
-                    (work_x, work_y, safe_w, work_h.max(1))
-                } else {
-                    let stack_count = count - 1;
-                    let stack_index = i - 1;
-                    let stack_h = work_h / stack_count;
-                    let this_h = if stack_index == stack_count - 1 {
-                        work_h - (stack_h * (stack_count - 1))
-                    } else {
-                        stack_h
-                    };
-
-                    let sx = work_x + master_width + (gap / 2);
-                    let sy = work_y + (stack_index * stack_h);
-
-                    let (final_sy, final_h) = if stack_count > 1 {
-                        if stack_index == 0 {
-                            (sy, this_h.saturating_sub(gap/2))
-                        } else if stack_index == stack_count - 1 {
-                            (sy + gap/2, this_h.saturating_sub(gap/2))
-                        } else {
-                            (sy + gap/2, this_h.saturating_sub(gap))
-                        }
-                    } else {
-                        (sy, this_h)
-                    };
-
-                    let safe_w = (stack_width.saturating_sub(gap / 2)).max(1);
-                    let safe_h = final_h.max(1);
-
-                    (sx, final_sy, safe_w, safe_h)
-                }
-            };
-
-            // debugln!("  Win {}: ID={} -> {}x{} @ {},{}", i, wid, tw, th, tx, ty);
-
-            // Apply to window
-            let mut win_idx = None;
-            for idx in 0..self.windows.len() {
-                if self.windows[idx].id == wid {
-                    win_idx = Some(idx);
-                    break;
-                }
-            }
-
-            if let Some(idx) = win_idx {
-                // debugln!("    Applying to idx {}", idx);
-                let current_w = self.windows[idx].width;
-                let current_h = self.windows[idx].height;
-                let current_x = self.windows[idx].x;
-                let current_y = self.windows[idx].y;
-
-                if current_x != tx as isize || current_y != ty as isize || current_w != tw || current_h != th {
-                    any_change = true;
-
-                    // Helper to expand dirty rect
-                    let mut add_rect = |rx: i32, ry: i32, rw: i32, rh: i32| {
-                        if min_x > rx { min_x = rx; }
-                        if min_y > ry { min_y = ry; }
-                        if max_x < rx + rw { max_x = rx + rw; }
-                        if max_y < ry + rh { max_y = ry + rh; }
-                    };
-
-                    // 1. Old area
-                    add_rect(current_x as i32, current_y as i32, current_w as i32, current_h as i32);
-
-                    // 2. New area (target)
-                    add_rect(tx as i32, ty as i32, tw as i32, th as i32);
-
-                    // 3. New area (drawn with old size - effectively where we will draw momentarily)
-                    add_rect(tx as i32, ty as i32, current_w as i32, current_h as i32);
-
-                    // Update Position ONLY
-                    self.windows[idx].x = tx as isize;
-                    self.windows[idx].y = ty as isize;
-                    // Note: We DO NOT update width/height here to avoid reading OOB on the old buffer.
-                    // We wait for the app to resize and call resize_window.
-                    self.windows[idx].can_move = false;
-                    self.windows[idx].can_resize = false;
-
-                    // Send Event if size changed
-                    if current_w != tw || current_h != th {
-                        // debugln!("    Size changed ({}x{} -> {}x{}), sending event...", current_w, current_h, tw, th);
-                        let mut queue = GLOBAL_EVENT_QUEUE.lock();
-                        queue.add_event(Event::Resize(ResizeEvent {
-                            wid: wid as u32,
-                            width: tw,
-                            height: th,
-                        }));
-                        drop(queue);
-                        // debugln!("    Event sent.");
-                    }
-                }
-            } else {
-                // debugln!("    Window ID {} not found!", wid);
-            }
-        }
-
-        if any_change {
-            // Clamp to screen
-            let sx = min_x.max(0);
-            let sy = min_y.max(0);
-            let ex = max_x.min(screen_w as i32);
-            let ey = max_y.min(screen_h as i32);
-
-            if ex > sx && ey > sy {
-                self.update_window_area_rect(sx, sy, (ex - sx) as u32, (ey - sy) as u32);
-            }
-        }
+        // Full redraw (could be optimized, but safe for now)
+        self.update_window_area_rect(0, 0, screen_w as u32, screen_h as u32);
     }
 
     pub fn check_id(&self, _rng_seed: u64) -> usize {
@@ -310,6 +149,27 @@ impl Composer {
         }
 
         w.id = self.check_id(w.buffer as u64);
+
+        // Cascade positioning for new windows
+        if wtype == Items::Window {
+            let mut count = 0;
+            for i in 0..self.windows.len() {
+                if self.windows[i].w_type == Items::Window {
+                    count += 1;
+                }
+            }
+            // Simple cascade
+            let offset = 30;
+            let start_x = 50;
+            let start_y = 50;
+            
+            w.x = (start_x + (count * offset)) as isize;
+            w.y = (start_y + (count * offset)) as isize;
+            
+            // Ensure movable
+            w.can_move = true;
+            w.can_resize = true;
+        }
 
         for i in 0..self.windows.len() {
             match self.windows[i].w_type {

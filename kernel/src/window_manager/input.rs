@@ -312,12 +312,14 @@ impl Mouse {
                 let w = &composer.windows[i];
                 match w.w_type {
                     Items::Bar | Items::Popup => {
-                        display_server.copy_to_fb_a(
+                        // Only redraw the part of the Bar/Popup that intersects with the dragged window
+                        display_server.copy_to_fb_clipped(
                             w.width as u32,
                             w.height as u32,
                             w.buffer,
                             w.x as i32,
                             w.y as i32,
+                            new_x as i32, new_y as i32, width as u32, height as u32, // Clip to dragged window rect
                             None
                         );
                     }
@@ -420,7 +422,6 @@ impl Mouse {
 
                     if self.left {
                         crate::debugln!("Input: Dispatching Mouse Event to {}", w.id);
-                        CLICKED_WINDOW_ID = w.id;
                     }
                 }
             }
