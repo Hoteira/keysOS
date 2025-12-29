@@ -37,7 +37,7 @@ pub extern "C" fn _start() -> ! {
         .background_color(Color::rgb(0, 0, 0));
 
     
-    if let Ok(mut file) = File::open("@0xE0/sys/img/wallpaper.png") {
+    if let Ok(mut file) = File::open("@0xE0/sys/img/wallpaper2.png") {
         let size = file.size();
         if size > 0 {
             let buffer_addr = std::memory::malloc(size);

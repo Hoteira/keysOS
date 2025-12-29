@@ -16,6 +16,13 @@
 [![Platform](https://img.shields.io/badge/Platform-x86__64-blue.svg?style=for-the-badge&logo=intel)](https://en.wikipedia.org/wiki/X86-64)
 [![QEMU](https://img.shields.io/badge/Emulation-QEMU_VirtIO-ff7e00.svg?style=for-the-badge&logo=qemu)](https://www.qemu.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
+
+
+<br>
+<img src="icon/screenshot1.png" alt="KrakeOS Screenshot" style="border: 1px solid #9070FF;" width="640" height="360"/>
+<br>
+
+Gonna write it soon, stay tuned!
 </div>
 
 
