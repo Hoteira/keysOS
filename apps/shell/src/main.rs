@@ -211,26 +211,14 @@ pub extern "C" fn _start() -> ! {
                         
                         
                         let is_builtin = match parsed.cmd.as_str() {
-                            "cd" | "ls" | "pwd" | "help" | "clear" | "touch" | "mkdir" | "rm" | "mv" | "cp" | "sleep" => true,
+                            "cd" | "ls" | "pwd" | "help" | "clear" | "touch" | "mkdir" | "rm" | "mv" | "cp" | "sleep" | "osfetch" => true,
                             _ => false
                         };
                         
                         if is_builtin {
                              
-                             
-                             
-                             
-                             
-                             
-                             
-                             
-                             
-                             
-                             
                              execute_builtin(&parsed.cmd, &parsed.args, &mut cwd, stdin_fd, stdout_fd);
-                             
-                             
-                             
+                            
                         } else {
                             
                             let mut prog_path = String::new();
@@ -321,7 +309,76 @@ pub extern "C" fn _start() -> ! {
 
 fn execute_builtin(cmd: &str, args: &[String], cwd: &mut String, in_fd: usize, out_fd: usize) {
     if cmd == "help" {
-        std::os::file_write(out_fd, b"Available commands: help, clear, ls, cd, pwd, touch, mkdir, rm, mv, cp, cat, sleep\n");
+        std::os::file_write(out_fd, b"Available commands: help, clear, ls, cd, pwd, touch, mkdir, rm, mv, cp, cat, sleep, osfetch\n");
+    } else if cmd == "osfetch" {
+        let purple = "\x1B[38;2;144;112;255m";
+        let white = "\x1B[97m";
+        let blue = "\x1B[94m"; 
+        let gray = "\x1B[90m";
+        let reset = "\x1B[0m";
+
+        let ascii = [
+            "              @@@             ",
+            "         @@@@@@@@@@@@@        ",
+            "       @@@@@@@@@@@@@@@@@      ",
+            "      @@@@@@@@@@@@@@@@@@@     ",
+            "     &@@@@@@@@@@@@@@@@@@@     ",
+            "     &@@@@@@@@@@@@@@@@@@@     ",
+            "     &@/   \\@@@@@@@/   \\@     ",
+            "     &@\\   /@@@@@@@\\   /@     ",
+            "     &@@@@@@@@@@@@@@@@@@@     ",
+            "     &@@@  @@@   @@@  @@@     ",
+            " @@@ &@@   @@@   @@@  @@@  @@@",
+            "@@@@ &@@   @@@   @@@  @@@  &@@",
+            "  @@@@@    @@@   @@@   @@@@@@ ",
+            "",
+        ];
+
+        let screen_w = std::graphics::get_screen_width();
+        let screen_h = std::graphics::get_screen_height();
+        let (h, m, s) = std::os::get_time();
+        
+        let info = [
+            format!("{}Guest{}@{}KrakeOS{}", blue, white, blue, reset),
+            format!("{}-----------------{}", gray, reset),
+            format!("{} \u{F306} OS: {}KrakeOS{}", purple, white, reset),
+            format!("{} \u{E712} Kernel: {}KrakeOS Kernel 0.1.0{}", purple, white, reset),
+            format!("{} \u{F017} Uptime: {}{}:{}:{:02}{}", purple, white, h, m, s, reset),
+            format!("{} \u{F26C} Resolution: {}{}x{}{}", purple, white, screen_w, screen_h, reset),
+            format!("{} \u{E795} Shell: {}shell{}", purple, white, reset),
+            format!("{} \u{F2DB} PGU: {}virtIO{}", purple, white, reset),
+            format!("{} \u{F031} Font: {}Caskaydia Nerd Font{}", purple, white, reset),
+            String::from(""),
+            String::from(""),
+            String::from(""),
+            String::from(""),
+            String::from(""),
+        ];
+
+        let ascii_width = 40;
+        
+        for i in 0..14 {
+            let a_line = if i < ascii.len() { ascii[i] } else { "" };
+            let i_line = if i < info.len() { &info[i] } else { "" };
+            
+            let mut a_string = String::from(a_line);
+            if a_string.chars().count() > ascii_width {
+                let mut new_s = String::new();
+                for (idx, c) in a_string.chars().enumerate() {
+                    if idx >= ascii_width { break; }
+                    new_s.push(c);
+                }
+                a_string = new_s;
+            }
+            
+            while a_string.chars().count() < ascii_width {
+                a_string.push(' ');
+            }
+            
+            let msg = format!("{}{}{}  {}\n", purple, a_string, reset, i_line);
+            std::os::file_write(out_fd, msg.as_bytes());
+        }
+        std::os::file_write(out_fd, b"\n");
     } else if cmd == "sleep" {
         if !args.is_empty() {
             if let Ok(ms) = args[0].parse::<u64>() {

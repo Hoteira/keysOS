@@ -126,8 +126,8 @@ pub extern "C" fn _start() -> ! {
     let heap_ptr = std::memory::malloc(heap_size);
     std::memory::heap::init_heap(heap_ptr as *mut u8, heap_size);
 
-    let width = 600;
-    let height = 400;
+    let width = 1000;
+    let height = 800;
     
     let screen_w = std::graphics::get_screen_width();
     let screen_h = std::graphics::get_screen_height();
@@ -260,7 +260,7 @@ pub extern "C" fn _start() -> ! {
                         
                         let mut j = i + 2;
                         let mut end_found = false;
-                        while j < n && j < i + 12 { 
+                        while j < n && j < i + 32 { 
                             let c = pipe_buf[j];
                             if c >= 0x40 && c <= 0x7E {
                                 end_found = true;
@@ -430,18 +430,44 @@ pub extern "C" fn _start() -> ! {
                     if let inkui::widget::Widget::Label { text, geometry, .. } = widget {
                         let line_height = (text.size as f32 * 1.2) as usize;
                         let scroll_y = geometry.scroll_offset_y;
+
+                        let padding = 10;
+                        let width = geometry.width.saturating_sub(padding * 2);
+                        let char_width = (text.size as f32 * 0.6) as usize;
                         
+                        let current_lines = if term_buffer.is_alt { &term_buffer.alt_lines } else { &term_buffer.lines };
+                        let mut prev_visual_lines = 0;
                         
-                        let row_y_in_widget = term_buffer.cursor_row * line_height;
-                        
-                        if row_y_in_widget >= scroll_y {
-                            let relative_y = row_y_in_widget - scroll_y;
-                            let screen_y = geometry.y + geometry.padding + relative_y;
+                        if width > 0 && char_width > 0 {
+                            let chars_per_line = width / char_width;
+                            for (i, line) in current_lines.iter().enumerate() {
+                                if i == term_buffer.cursor_row {
+                                    break;
+                                }
+                                let len = line.chars().count();
+                                if len == 0 { prev_visual_lines += 1; }
+                                else { prev_visual_lines += (len + chars_per_line - 1) / chars_per_line; }
+                            }
                             
+                            let current_line = &current_lines[term_buffer.cursor_row];
+                            let len = current_line.chars().count();
+                            let current_row_visual_lines = if len == 0 { 1 } else { (len + chars_per_line - 1) / chars_per_line };
                             
-                            if screen_y + line_height <= win.height {
-                                win.update_area(0, screen_y, win.width, line_height + 5);
-                                partial_update = true;
+                            let row_y_start = prev_visual_lines * line_height;
+                            let update_height = (current_row_visual_lines + 1) * line_height;
+
+                            if row_y_start + update_height >= scroll_y {
+                                let relative_y = if row_y_start >= scroll_y {
+                                    row_y_start - scroll_y
+                                } else {
+                                    0
+                                };
+                                let screen_y = geometry.y + geometry.padding + relative_y;
+
+                                if screen_y < win.height {
+                                     win.update_area(0, screen_y, win.width, update_height + 5);
+                                     partial_update = true;
+                                }
                             }
                         }
                     }

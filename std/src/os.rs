@@ -70,11 +70,14 @@ pub fn print(s: &str) {
 }
 
 pub fn sleep(ms: u64) {
-    unsafe {
-        syscall(76, ms, 0, 0);
-    }
 
-    yield_task();
+    if ms > 10 {
+        unsafe {
+            syscall(76, ms, 0, 0);
+        }
+
+        yield_task();
+    }
 }
 
 pub fn yield_task() {
