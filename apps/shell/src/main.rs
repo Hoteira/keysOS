@@ -256,17 +256,23 @@ pub extern "C" fn _start() -> ! {
                             }
                             
                             if found {
+                                let mut full_cmd = prog_path.clone();
+                                for arg in &parsed.args {
+                                    full_cmd.push(' ');
+                                    full_cmd.push_str(arg);
+                                }
+
                                 let map = [
                                     (0, stdin_fd as u8),
                                     (1, stdout_fd as u8),
                                     (2, 2)
                                 ];
                                 
-                                let pid = std::os::spawn_with_fds(&prog_path, &map);
+                                let pid = std::os::spawn_with_fds(&full_cmd, &map);
                                 if pid != usize::MAX {
                                     children_pids.push(pid);
                                 } else {
-                                    let err = format!("Failed to spawn: {}\n", prog_path);
+                                    let err = format!("Failed to spawn: {}\n", full_cmd);
                                     std::os::file_write(STDOUT_FD, err.as_bytes());
                                 }
                             } else {
@@ -348,7 +354,7 @@ fn execute_builtin(cmd: &str, args: &[String], cwd: &mut String, in_fd: usize, o
         let h = total_seconds / 3600;
         let m = (total_seconds % 3600) / 60;
         let s = total_seconds % 60;
-        
+
         let info = [
             format!("{}guest{}@{}krakeos{}", p_pink, white, p_blue, reset),
             format!("{}-----------------{}", gray, reset),
@@ -386,7 +392,8 @@ fn execute_builtin(cmd: &str, args: &[String], cwd: &mut String, in_fd: usize, o
                 a_string.push(' ');
             }
             
-            let msg = format!("{}{}{}  {}\n", blue, a_string, reset, i_line);
+            let msg = format!("{}{}{}  {}
+", blue, a_string, reset, i_line);
             std::os::file_write(out_fd, msg.as_bytes());
         }
         std::os::file_write(out_fd, b"\n");

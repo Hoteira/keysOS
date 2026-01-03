@@ -126,8 +126,8 @@ pub extern "C" fn _start() -> ! {
     let heap_ptr = std::memory::malloc(heap_size);
     std::memory::heap::init_heap(heap_ptr as *mut u8, heap_size);
 
-    let width = 1000;
-    let height = 800;
+    let width = 500;
+    let height = 400;
     
     let screen_w = std::graphics::get_screen_width();
     let screen_h = std::graphics::get_screen_height();
@@ -137,6 +137,9 @@ pub extern "C" fn _start() -> ! {
     let mut win = Window::new("krakeOS Term", width, height);
     win.x = x as isize;
     win.y = y as isize;
+    
+    let mut ctrl_pressed = false;
+    const KEY_CTRL: u32 = 0x110005;
     
     {
         if let Ok(mut file) = File::open("@0xE0/sys/fonts/CaskaydiaNerd.ttf") {
@@ -207,12 +210,28 @@ pub extern "C" fn _start() -> ! {
         for event in events.iter() {
             match event {
                 Event::Keyboard(e) => {
-                    if e.pressed {
+                    if e.key == KEY_CTRL {
+                        ctrl_pressed = e.pressed;
+                    } else if e.pressed {
                         if let Some(c) = core::char::from_u32(e.key) {
                             for _ in 0..e.repeat {
                                 let mut buf = [0u8; 4];
-                                let s = c.encode_utf8(&mut buf);
-                                std::os::file_write(unsafe { TERM_WRITE_FD }, s.as_bytes());
+                                let bytes_to_write = if ctrl_pressed {
+                                    if c >= 'a' && c <= 'z' {
+                                        let code = (c as u8) - b'a' + 1;
+                                        buf[0] = code;
+                                        &buf[0..1]
+                                    } else if c >= 'A' && c <= 'Z' {
+                                        let code = (c as u8) - b'A' + 1;
+                                        buf[0] = code;
+                                        &buf[0..1]
+                                    } else {
+                                        c.encode_utf8(&mut buf).as_bytes()
+                                    }
+                                } else {
+                                    c.encode_utf8(&mut buf).as_bytes()
+                                };
+                                std::os::file_write(unsafe { TERM_WRITE_FD }, bytes_to_write);
                             }
                         }
                     }
@@ -232,7 +251,7 @@ pub extern "C" fn _start() -> ! {
                     win.draw();
                     win.update();
                 },
-                _ => {}
+                _ => {} 
             }
         }
 
@@ -260,7 +279,7 @@ pub extern "C" fn _start() -> ! {
                         
                         let mut j = i + 2;
                         let mut end_found = false;
-                        while j < n && j < i + 32 { 
+                        while j < n && j < i + 32 {
                             let c = pipe_buf[j];
                             if c >= 0x40 && c <= 0x7E {
                                 end_found = true;
@@ -350,7 +369,7 @@ pub extern "C" fn _start() -> ! {
                                         }
                                     }
                                 },
-                                _ => {}
+                                _ => {} 
                             }
                             i = j + 1;
                         } else {
@@ -396,7 +415,8 @@ pub extern "C" fn _start() -> ! {
                                 let len = line.chars().count(); 
                                 if len == 0 {
                                     visual_lines += 1;
-                                } else {
+                                }
+                                 else {
                                     visual_lines += (len + chars_per_line - 1) / chars_per_line;
                                 }
                             }

@@ -891,13 +891,13 @@ pub extern "C" fn syscall_dispatcher(context: &mut CPUState) {
                                             }
                                         }
                                     } else {
-                                        pfd.revents = POLLERR;
+                                        pfd.revents = 8;
                                     }
                                 } else {
-                                    pfd.revents = POLLNVAL;
+                                    pfd.revents = 32;
                                 }
                             } else {
-                                pfd.revents = POLLNVAL;
+                                pfd.revents = 32;
                             }
                             
                             if pfd.revents != 0 {
@@ -1055,7 +1055,7 @@ pub extern "C" fn syscall_dispatcher(context: &mut CPUState) {
              };
              
              if parent_old != parent_new {
-                 debugln!("SYS_RENAME: Moving between directories not supported yet");
+                 
                  context.rax = u64::MAX; 
                  return;
              }
@@ -1140,7 +1140,7 @@ pub extern "C" fn syscall_dispatcher(context: &mut CPUState) {
         }
 
         _ => {
-            debugln!("[Syscall] Unknown syscall #{}", syscall_num);
+            
             context.rax = u64::MAX;
         }
     }
@@ -1156,5 +1156,3 @@ pub struct PollFd {
 
 pub const POLLIN: i16 = 0x001;
 pub const POLLOUT: i16 = 0x004;
-pub const POLLERR: i16 = 0x008;
-pub const POLLNVAL: i16 = 0x020;
