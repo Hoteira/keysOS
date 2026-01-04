@@ -1,5 +1,5 @@
-use core::ffi::{c_char, c_int, c_uint};
 use crate::stdlib::malloc;
+use core::ffi::{c_char, c_int};
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn memset(s: *mut core::ffi::c_void, c: c_int, n: usize) -> *mut core::ffi::c_void {
@@ -110,10 +110,12 @@ pub unsafe extern "C" fn strncpy(d: *mut c_char, s: *const c_char, n: usize) -> 
     while i < n {
         let c = *s.add(i);
         if c == 0 { break; }
-        *d.add(i) = c; i += 1;
+        *d.add(i) = c;
+        i += 1;
     }
     while i < n {
-        *d.add(i) = 0; i += 1;
+        *d.add(i) = 0;
+        i += 1;
     }
     d
 }

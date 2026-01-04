@@ -30,7 +30,6 @@ pub fn outb(port: u16, value: u8) {
     }
 }
 
-
 pub struct Terminal;
 
 impl Terminal {
@@ -45,7 +44,6 @@ impl fmt::Write for Terminal {
         Ok(())
     }
 }
-
 
 #[macro_export]
 macro_rules! print {

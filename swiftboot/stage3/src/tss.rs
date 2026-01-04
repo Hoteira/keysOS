@@ -20,7 +20,7 @@ pub struct TaskStateSegment {
 
 pub static mut BASE_TSS: TaskStateSegment = TaskStateSegment {
     reserved1: 0,
-    rsp0: 0x30_0000, 
+    rsp0: 0x30_0000,
     rsp1: 0,
     rsp2: 0,
     reserved2: 0,
@@ -33,5 +33,5 @@ pub static mut BASE_TSS: TaskStateSegment = TaskStateSegment {
     ist7: 0,
     reserved3: 0,
     reserved4: 0,
-    iopb_offset: 0, 
+    iopb_offset: 0,
 };

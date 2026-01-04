@@ -1,5 +1,12 @@
-use core::ffi::{c_char, c_int, c_uint};
 use crate::string::strlen;
+use core::ffi::{c_char, c_int, c_uint};
+
+#[repr(C)]
+pub struct pollfd {
+    pub fd: c_int,
+    pub events: i16,
+    pub revents: i16,
+}
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn open(path: *const c_char, _flags: c_int, ...) -> c_int {
@@ -79,7 +86,12 @@ pub unsafe extern "C" fn getcwd(buf: *mut c_char, size: usize) -> *mut c_char {
     buf
 }
 
-#[unsafe(no_mangle)] 
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn poll(fds: *mut crate::unistd::pollfd, nfds: core::ffi::c_ulong, timeout: c_int) -> c_int {
+    std::os::poll(core::slice::from_raw_parts_mut(fds as *mut std::os::PollFd, nfds as usize), timeout)
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn usleep(usec: c_uint) -> c_int {
     std::os::syscall(76, usec as u64, 0, 0);
     0

@@ -1,6 +1,93 @@
-use core::ffi::{c_char, c_int, c_uint};
+use crate::string::strlen;
 use alloc::string::String;
-use crate::string::{strlen, strcpy, strcmp};
+use core::ffi::{c_char, c_int, c_uint, c_long, c_void};
+
+#[repr(C)]
+pub struct timeval {
+    pub tv_sec: c_long,
+    pub tv_usec: c_long,
+}
+
+#[repr(C)]
+pub struct timezone {
+    pub tz_minuteswest: c_int,
+    pub tz_dsttime: c_int,
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gettimeofday(tv: *mut timeval, _tz: *mut timezone) -> c_int {
+    if tv.is_null() { return -1; }
+    let ticks = std::os::get_system_ticks();
+    (*tv).tv_sec = (ticks / 1000) as c_long;
+    (*tv).tv_usec = ((ticks % 1000) * 1000) as c_long;
+    0
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn time(t: *mut c_long) -> c_long {
+    let seconds = (std::os::get_system_ticks() / 1000) as c_long;
+    if !t.is_null() { *t = seconds; }
+    seconds
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn realpath(path: *const c_char, resolved_path: *mut c_char) -> *mut c_char {
+    let res = resolve_path_rust(path);
+    if resolved_path.is_null() {
+        crate::string::strdup(res.as_ptr() as *const c_char)
+    } else {
+        let len = res.len();
+        core::ptr::copy_nonoverlapping(res.as_ptr() as *const c_char, resolved_path, len);
+        *resolved_path.add(len) = 0;
+        resolved_path
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tgetstr(_id: *const c_char, _area: *mut *mut c_char) -> *mut c_char {
+    core::ptr::null_mut()
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn sigaction(_signum: c_int, _act: *const c_void, _oldact: *mut c_void) -> c_int { 0 }
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn regcomp(_preg: *mut c_void, _regex: *const c_char, _cflags: c_int) -> c_int { 0 }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn regexec(_preg: *const c_void, _string: *const c_char, _nmatch: usize, _pmatch: *mut c_void, _eflags: c_int) -> c_int { 1 } // REG_NOMATCH
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn regerror(_errcode: c_int, _preg: *const c_void, _errbuf: *mut c_char, _errbuf_size: usize) -> usize { 0 }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn regfree(_preg: *mut c_void) {}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn iswalnum(wc: c_int) -> c_int { if (wc >= b'0' as c_int && wc <= b'9' as c_int) || (wc >= b'a' as c_int && wc <= b'z' as c_int) || (wc >= b'A' as c_int && wc <= b'Z' as c_int) { 1 } else { 0 } }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn iswblank(wc: c_int) -> c_int { if wc == b' ' as c_int || wc == b'\t' as c_int { 1 } else { 0 } }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn iswpunct(wc: c_int) -> c_int { if (wc >= 33 && wc <= 47) || (wc >= 58 && wc <= 64) || (wc >= 91 && wc <= 96) || (wc >= 123 && wc <= 126) { 1 } else { 0 } }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn iswspace(wc: c_int) -> c_int { isspace(wc) }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn iswprint(wc: c_int) -> c_int { if wc >= 32 && wc <= 126 { 1 } else { 0 } }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn towlower(wc: c_int) -> c_int { tolower(wc) }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn towupper(wc: c_int) -> c_int { toupper(wc) }
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn wcwidth(wc: c_int) -> c_int {
+    if wc == 0 { return 0; }
+    if wc < 32 { return -1; }
+    1 // Basic assumption for ASCII-like
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn wctomb(s: *mut c_char, wc: c_int) -> c_int {
+    if s.is_null() { return 0; } // State-independent
+    *s = wc as c_char;
+    1
+}
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn setlocale(_category: c_int, _locale: *const c_char) -> *mut c_char {
@@ -42,8 +129,10 @@ pub unsafe extern "C" fn getpwuid(_uid: c_uint) -> *mut passwd {
     &raw mut PW
 }
 
-#[unsafe(no_mangle)] pub unsafe extern "C" fn getpwent() -> *mut passwd { getpwuid(0) }
-#[unsafe(no_mangle)] pub unsafe extern "C" fn endpwent() { }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn getpwent() -> *mut passwd { getpwuid(0) }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn endpwent() {}
 
 pub unsafe fn resolve_path_rust(path: *const c_char) -> String {
     if path.is_null() { return String::new(); }
@@ -69,14 +158,12 @@ pub unsafe fn resolve_path_rust(path: *const c_char) -> String {
             let rest = &current_path[idx..];
             for part in rest.split('/') {
                 if part.is_empty() || part == "." { continue; }
-                if part == ".." { parts.pop(); }
-                else { parts.push(part); }
+                if part == ".." { parts.pop(); } else { parts.push(part); }
             }
         } else {
             for part in current_path.split('/') {
                 if part.is_empty() || part == "." { continue; }
-                if part == ".." { parts.pop(); }
-                else { parts.push(part); }
+                if part == ".." { parts.pop(); } else { parts.push(part); }
             }
         }
     } else if current_path.contains('@') {
@@ -95,11 +182,22 @@ pub unsafe fn resolve_path_rust(path: *const c_char) -> String {
     result
 }
 
-#[unsafe(no_mangle)] pub unsafe extern "C" fn toupper(c: c_int) -> c_int { if c >= b'a' as c_int && c <= b'z' as c_int { c - 32 } else { c } }
-#[unsafe(no_mangle)] pub unsafe extern "C" fn tolower(c: c_int) -> c_int { if c >= b'A' as c_int && c <= b'Z' as c_int { c + 32 } else { c } }
-#[unsafe(no_mangle)] pub unsafe extern "C" fn isspace(c: c_int) -> c_int { if c == b' ' as c_int || c == b'\t' as c_int || c == b'\n' as c_int || c == b'\r' as c_int || c == 0x0B || c == 0x0C { 1 } else { 0 } }
-#[unsafe(no_mangle)] pub unsafe extern "C" fn isdigit(c: c_int) -> c_int { if c >= b'0' as c_int && c <= b'9' as c_int { 1 } else { 0 } }
-#[unsafe(no_mangle)] pub unsafe extern "C" fn isxdigit(c: c_int) -> c_int { if (c >= b'0' as c_int && c <= b'9' as c_int) || (c >= b'a' as c_int && c <= b'f' as c_int) || (c >= b'A' as c_int && c <= b'F' as c_int) { 1 } else { 0 } }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __assert_fail(assertion: *const c_char, file: *const c_char, line: c_uint, function: *const c_char) {
+    crate::stdio::fprintf(crate::stdio::STDERR, b"Assertion failed: %s (%s:%u: %s)\n\0".as_ptr() as *mut c_char, assertion, file, line, function);
+    crate::stdlib::exit(1);
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn toupper(c: c_int) -> c_int { if c >= b'a' as c_int && c <= b'z' as c_int { c - 32 } else { c } }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn tolower(c: c_int) -> c_int { if c >= b'A' as c_int && c <= b'Z' as c_int { c + 32 } else { c } }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn isspace(c: c_int) -> c_int { if c == b' ' as c_int || c == b'\t' as c_int || c == b'\n' as c_int || c == b'\r' as c_int || c == 0x0B || c == 0x0C { 1 } else { 0 } }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn isdigit(c: c_int) -> c_int { if c >= b'0' as c_int && c <= b'9' as c_int { 1 } else { 0 } }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn isxdigit(c: c_int) -> c_int { if (c >= b'0' as c_int && c <= b'9' as c_int) || (c >= b'a' as c_int && c <= b'f' as c_int) || (c >= b'A' as c_int && c <= b'F' as c_int) { 1 } else { 0 } }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn mkstemps(template: *mut c_char, suffixlen: c_int) -> c_int {

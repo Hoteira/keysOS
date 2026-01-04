@@ -115,7 +115,6 @@ pub struct VirtioGpuDisplayOne {
     pub flags: u32,
 }
 
-
 #[repr(C, align(16))]
 #[derive(Debug, Clone, Copy)]
 pub struct VirtqDesc {
@@ -130,7 +129,7 @@ pub struct VirtqDesc {
 pub struct VirtqAvail {
     pub flags: u16,
     pub idx: u16,
-    pub ring: [u16; 128], 
+    pub ring: [u16; 128],
     pub used_event: u16,
 }
 
@@ -146,6 +145,6 @@ pub struct VirtqUsedElem {
 pub struct VirtqUsed {
     pub flags: u16,
     pub idx: u16,
-    pub ring: [VirtqUsedElem; 128], 
+    pub ring: [VirtqUsedElem; 128],
     pub avail_event: u16,
 }

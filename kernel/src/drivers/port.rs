@@ -2,11 +2,10 @@ use core::arch::asm;
 
 #[allow(dead_code)]
 pub struct Port {
-    port: u16
+    port: u16,
 }
 
 impl Port {
-
     #[allow(dead_code)]
     pub fn new(port: u16) -> Self {
         Port { port }

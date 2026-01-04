@@ -1,7 +1,7 @@
 use crate::interrupts::task::CPUState;
-use crate::window_manager::window::Window;
 use crate::window_manager::composer::COMPOSER;
 use crate::window_manager::display::DISPLAY_SERVER;
+use crate::window_manager::window::Window;
 
 pub fn sys_add_window(context: &mut CPUState) {
     let window_ptr = context.rdi as *const Window;
@@ -45,11 +45,11 @@ pub fn sys_get_events(context: &mut CPUState) {
     let wid = context.rdi as u32;
     let buf_ptr = context.rsi as *mut crate::window_manager::events::Event;
     let max_events = context.rdx as usize;
-    
+
     unsafe {
         use crate::window_manager::events::GLOBAL_EVENT_QUEUE;
         let events = GLOBAL_EVENT_QUEUE.lock().get_and_remove_events(wid, max_events);
-        
+
         let user_slice = core::slice::from_raw_parts_mut(buf_ptr, max_events);
         for (i, evt) in events.into_iter().enumerate() {
             if i < max_events {

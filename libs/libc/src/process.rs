@@ -1,10 +1,14 @@
+use crate::string::strcmp;
 use core::ffi::{c_char, c_int};
-use crate::string::{strcmp};
 
-#[unsafe(no_mangle)] pub static mut optarg: *mut c_char = core::ptr::null_mut();
-#[unsafe(no_mangle)] pub static mut optind: c_int = 1;
-#[unsafe(no_mangle)] pub static mut opterr: c_int = 1;
-#[unsafe(no_mangle)] pub static mut optopt: c_int = 0;
+#[unsafe(no_mangle)]
+pub static mut optarg: *mut c_char = core::ptr::null_mut();
+#[unsafe(no_mangle)]
+pub static mut optind: c_int = 1;
+#[unsafe(no_mangle)]
+pub static mut opterr: c_int = 1;
+#[unsafe(no_mangle)]
+pub static mut optopt: c_int = 0;
 
 #[repr(C)]
 pub struct option {
@@ -39,8 +43,10 @@ pub unsafe extern "C" fn getopt_long(argc: c_int, argv: *const *mut c_char, opts
                         optind += 1;
                     } else { return b'?' as c_int; }
                 }
-                if opt.flag.is_null() { return opt.val; } 
-                else { *opt.flag = opt.val; return 0; }
+                if opt.flag.is_null() { return opt.val; } else {
+                    *opt.flag = opt.val;
+                    return 0;
+                }
             }
             i += 1;
         }

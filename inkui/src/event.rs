@@ -40,5 +40,5 @@ pub enum Event {
     Keyboard(KeyboardEvent),
     Resize(ResizeEvent),
     Redraw(RedrawEvent),
-    None
+    None,
 }

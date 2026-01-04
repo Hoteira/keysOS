@@ -26,10 +26,8 @@ pub fn read(segment: u16, offset: u16, lba: u64, sectors: u16) {
         "mov {1:x}, si",
         "mov si, {0:x}",
         "int 0x13",
-
         "jc fail",
         "mov si, {1:x}",
-
         in(reg) &disk_setup as *const Dap as u16,
         out(reg) _,
         in("ax") 0x4200_u16,

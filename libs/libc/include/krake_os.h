@@ -3,13 +3,11 @@
 
 #include <stddef.h>
 
-
 #define EVENT_MOUSE 0
 #define EVENT_KEYBOARD 1
 #define EVENT_RESIZE 2
 #define EVENT_REDRAW 3
 #define EVENT_NONE 4
-
 
 #define KEY_W 0x77
 #define KEY_A 0x61

@@ -4,8 +4,8 @@ pub mod fs;
 pub mod process;
 pub mod system;
 
-use core::arch::naked_asm;
 use crate::interrupts::task::CPUState;
+use core::arch::naked_asm;
 
 pub const SYS_READ: u64 = 0;
 pub const SYS_PRINT: u64 = 1;
@@ -102,7 +102,7 @@ pub extern "C" fn syscall_entry() {
 #[unsafe(no_mangle)]
 pub extern "C" fn syscall_dispatcher(context: &mut CPUState) {
     let syscall_num = context.rax;
-    context.rax = 0; 
+    context.rax = 0;
 
     match syscall_num {
         SYS_READ => system::sys_read(context),

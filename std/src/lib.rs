@@ -2,6 +2,7 @@
 #![feature(linkage)]
 #![feature(naked_functions)]
 
+extern crate alloc;
 pub mod io;
 pub mod memory;
 pub mod os;
@@ -9,10 +10,8 @@ pub mod graphics;
 pub mod sync;
 pub mod fs;
 
-pub use crate::io::serial::_print;
 pub use crate::io::serial::_debug_print;
-
-extern crate alloc;
+pub use crate::io::serial::_print;
 
 #[cfg(feature = "userland")]
 #[panic_handler]
@@ -75,7 +74,7 @@ pub unsafe extern "C" fn rust_start(stack: *const usize) -> !
 
     // 4. Call main
     let code = main(argc, argv);
-    
+
     os::exit(code as u64);
 }
 

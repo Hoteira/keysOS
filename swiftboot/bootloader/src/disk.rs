@@ -1,5 +1,5 @@
-use core::arch::asm;
 use crate::{NEXT_STAGE_LBA, NEXT_STAGE_RAM};
+use core::arch::asm;
 
 #[repr(C, packed)]
 struct Dap {
@@ -23,17 +23,15 @@ pub fn read_stub() {
 
     unsafe {
         asm!(
-            "mov {1:x}, si",
-            "mov si, {0:x}",
-            "int 0x13",
-
-            "jc fail",
-            "mov si, {1:x}",
-
-            in(reg) &disk_setup as *const Dap as u16,
-            out(reg) _,
-            in("ax") 0x4200_u16,
-            in("dx") 0x80_u16,
+        "mov {1:x}, si",
+        "mov si, {0:x}",
+        "int 0x13",
+        "jc fail",
+        "mov si, {1:x}",
+        in(reg) &disk_setup as *const Dap as u16,
+        out(reg) _,
+        in("ax") 0x4200_u16,
+        in("dx") 0x80_u16,
         );
     }
 }

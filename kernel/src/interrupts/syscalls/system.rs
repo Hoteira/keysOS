@@ -1,10 +1,10 @@
-use crate::interrupts::task::{CPUState, TASK_MANAGER, TaskState, SYSTEM_TICKS};
 use crate::drivers::periferics::keyboard::KEYBOARD_BUFFER;
+use crate::interrupts::task::{CPUState, TaskState, SYSTEM_TICKS, TASK_MANAGER};
 use crate::window_manager::input::MOUSE;
 use alloc::string::String;
 
 pub fn sys_read(context: &mut CPUState) {
-    let user_ptr = context.rdi as *mut u8; 
+    let user_ptr = context.rdi as *mut u8;
     let user_len = context.rsi as usize;
     let mut bytes_written_to_user = 0;
 
@@ -28,7 +28,7 @@ pub fn sys_read(context: &mut CPUState) {
 }
 
 pub fn sys_print(context: &mut CPUState) {
-    let ptr = context.rdi; 
+    let ptr = context.rdi;
     let len = context.rsi as usize;
     let s = unsafe { core::slice::from_raw_parts(ptr as *const u8, len) };
     let str_val = String::from_utf8_lossy(s);

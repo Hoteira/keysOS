@@ -12,13 +12,12 @@ mod rsdp;
 use core::ptr::addr_of;
 use gdt::GDT;
 
-use core::arch::asm;
-use core::panic::PanicInfo;
 use crate::debug::debug;
 use crate::mmap::{get_mmap, MemoryMap};
 use crate::rsdp::{get_rsdp, Rsdp};
 use crate::vbe::{find_vbe_mode, get_vbe_info, VbeInfoBlock, VbeModeInfoBlock};
-
+use core::arch::asm;
+use core::panic::PanicInfo;
 
 static mut BOOT: BootInfo = unsafe { core::mem::zeroed() };
 static mut VBE_MODE: VbeModeInfoBlock = unsafe { core::mem::zeroed() };
@@ -42,7 +41,6 @@ pub const MAX_HEIGHT: u16 = 720;
 pub const MIN_HEIGHT: u16 = 720;
 
 pub const MODE: u16 = 0x1;
-
 
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
@@ -86,7 +84,6 @@ fn load_kernel() {
     for i in 0..chunks {
         let lba = KERNEL_LBA + (i as u64 * sectors_per_chunk as u64);
         let target = KERNEL_TARGET + (i as u32 * bytes_per_chunk as u32);
-
 
         disk::read(0x8000, 0x0000, lba, sectors_per_chunk as u16);
 
@@ -151,16 +148,13 @@ fn make_desc(base: u32, limit: u16) -> u64 {
 
 fn protected_mode() {
     unsafe {
-
         let tss_addr = (*(&raw mut GDT)).write_tss();
         (*(&raw mut GDT)).load();
-
 
         //BOOT.rsdp = get_rsdp();
         BOOT.vbe = get_vbe_info();
         BOOT.tss = tss_addr;
         get_mmap();
-
 
         if MODE != 0 {
             let best_mode = find_vbe_mode();
@@ -172,15 +166,13 @@ fn protected_mode() {
             );
         }
 
-        asm!("mov eax, cr0", "or eax, 1 << 0", "mov cr0, eax",);
+        asm!("mov eax, cr0", "or eax, 1 << 0", "mov cr0, eax", );
 
         asm!("mov bx, {0:x}", in(reg) addr_of!(BOOT) as u16);
 
         asm!("ljmp $0x8, ${}", const STAGE3_RAM, options(att_syntax));
     }
 }
-
-
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {

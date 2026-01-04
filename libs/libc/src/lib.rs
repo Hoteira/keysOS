@@ -2,9 +2,9 @@
 #![no_std]
 #![feature(naked_functions)]
 
+extern crate alloc;
 #[macro_use]
 extern crate std;
-extern crate alloc;
 
 pub mod string;
 pub mod stdlib;
@@ -14,6 +14,9 @@ pub mod terminal;
 pub mod fs;
 pub mod misc;
 pub mod process;
+pub mod math;
+pub mod krake_os;
+pub mod glob;
 
 use core::ffi::c_int;
 

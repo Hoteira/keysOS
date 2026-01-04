@@ -1,8 +1,8 @@
-use crate::interrupts::task::{CPUState, TASK_MANAGER, TaskState, MAX_TASKS, NULL_TASK};
+use crate::debugln;
+use crate::interrupts::task::{CPUState, TaskState, MAX_TASKS, NULL_TASK, TASK_MANAGER};
 use crate::window_manager::composer::COMPOSER;
-use crate::{debugln, debug_print};
-use alloc::vec::Vec;
 use alloc::string::String;
+use alloc::vec::Vec;
 
 pub fn sys_exit(context: &mut CPUState) {
     let exit_code = context.rdi;
@@ -35,7 +35,7 @@ pub fn sys_exit(context: &mut CPUState) {
 pub fn sys_spawn(context: &mut CPUState) {
     let path_ptr = context.rdi as *const u8;
     let path_len = context.rsi as usize;
-    let fd_map_ptr = context.rdx as *const (u8, u8); 
+    let fd_map_ptr = context.rdx as *const (u8, u8);
     let fd_map_len = context.r10 as usize;
 
     if path_ptr.is_null() || path_len == 0 {
@@ -67,7 +67,7 @@ pub fn sys_waitpid(context: &mut CPUState) {
     if target_pid < MAX_TASKS {
         match tm.tasks[target_pid].state {
             TaskState::Ready | TaskState::Reserved => {
-                context.rax = u64::MAX; 
+                context.rax = u64::MAX;
             }
             TaskState::Zombie => {
                 let exit_code = tm.tasks[target_pid].exit_code;
@@ -76,13 +76,13 @@ pub fn sys_waitpid(context: &mut CPUState) {
                 let k_stack_top = tm.tasks[target_pid].kernel_stack;
                 crate::memory::pmm::free_frames_by_pid(pid);
                 if k_stack_top != 0 {
-                     let k_stack_start = k_stack_top - (4096 * 16);
-                     crate::memory::pmm::free_frame(k_stack_start);
+                    let k_stack_start = k_stack_top - (4096 * 16);
+                    crate::memory::pmm::free_frame(k_stack_start);
                 }
                 tm.tasks[target_pid] = NULL_TASK;
             }
             _ => {
-                context.rax = 0; 
+                context.rax = 0;
             }
         }
     } else {
@@ -100,7 +100,7 @@ pub fn sys_kill(context: &mut CPUState) {
 pub fn sys_get_process_list(context: &mut CPUState) {
     let buf_ptr = context.rdi as *mut u8;
     let max_count = context.rsi as usize;
-    
+
     if buf_ptr.is_null() || max_count == 0 {
         context.rax = 0;
         return;
@@ -108,7 +108,7 @@ pub fn sys_get_process_list(context: &mut CPUState) {
 
     let mut count = 0;
     let tm = TASK_MANAGER.int_lock();
-    let struct_size = 48; 
+    let struct_size = 48;
 
     for (i, task) in tm.tasks.iter().enumerate() {
         if task.state != TaskState::Null {
@@ -116,13 +116,13 @@ pub fn sys_get_process_list(context: &mut CPUState) {
             let offset = count * struct_size;
             unsafe {
                 let ptr = buf_ptr.add(offset);
-                *(ptr as *mut u64) = i as u64; 
+                *(ptr as *mut u64) = i as u64;
                 *(ptr.add(8) as *mut u64) = match task.state {
-                     TaskState::Null => 0,
-                     TaskState::Reserved => 1,
-                     TaskState::Ready => 2,
-                     TaskState::Zombie => 3,
-                     TaskState::Sleeping => 4,
+                    TaskState::Null => 0,
+                    TaskState::Reserved => 1,
+                    TaskState::Ready => 2,
+                    TaskState::Zombie => 3,
+                    TaskState::Sleeping => 4,
                 };
                 let name_ptr = ptr.add(16);
                 core::ptr::copy_nonoverlapping(task.name.as_ptr(), name_ptr, 32);
@@ -148,7 +148,7 @@ pub fn spawn_process(path: &str, fd_inheritance: Option<&[(u8, u8)]>) -> Result<
 
     let actual_path = if path_parts.len() > 1 { path_parts[1..].join("/") } else { String::from("") };
     let process_name_str = if let Some(last_slash) = actual_path.rfind('/') {
-        &actual_path[last_slash+1..]
+        &actual_path[last_slash + 1..]
     } else {
         &actual_path
     };
@@ -189,7 +189,7 @@ pub fn spawn_process(path: &str, fd_inheritance: Option<&[(u8, u8)]>) -> Result<
                     new_fd_table = current_fds;
                 }
             }
-            drop(tm); 
+            drop(tm);
 
             for &g_fd in new_fd_table.iter() {
                 if g_fd != -1 {
@@ -201,12 +201,12 @@ pub fn spawn_process(path: &str, fd_inheritance: Option<&[(u8, u8)]>) -> Result<
                 let mut tm = TASK_MANAGER.int_lock();
                 tm.init_user_task(pid_idx, entry_point, pml4_phys, None, Some(new_fd_table), process_name_bytes, None, None)
             };
-            
+
             match init_res {
                 Ok(_) => Ok(pid),
                 Err(_) => Err(String::from("Failed to init task")),
             }
-        },
+        }
         Err(e) => Err(e),
     }
 }

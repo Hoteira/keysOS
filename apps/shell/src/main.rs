@@ -4,9 +4,8 @@
 extern crate alloc;
 use alloc::format;
 use alloc::string::String;
-use alloc::vec::Vec;
 use alloc::string::ToString;
-use std::{println};
+use alloc::vec::Vec;
 
 const STDIN_FD: usize = 0;
 const STDOUT_FD: usize = 1;
@@ -17,7 +16,7 @@ fn resolve_path(cwd: &str, path: &str) -> String {
     if trimmed_path.is_empty() { return String::from(cwd); }
 
     let mut parts = Vec::new();
-    
+
     if !trimmed_path.starts_with('@') {
         for part in cwd.split('/') {
             if !part.is_empty() {
@@ -37,9 +36,9 @@ fn resolve_path(cwd: &str, path: &str) -> String {
             parts.push(part);
         }
     }
-    
+
     if parts.is_empty() {
-         return String::from("@0xE0");
+        return String::from("@0xE0");
     }
 
     let mut res = String::new();
@@ -53,9 +52,9 @@ fn resolve_path(cwd: &str, path: &str) -> String {
 #[derive(PartialEq)]
 enum RedirectionType {
     None,
-    Output(String), 
-    Append(String), 
-    Input(String),  
+    Output(String),
+    Append(String),
+    Input(String),
 }
 
 struct CommandSegment {
@@ -73,24 +72,24 @@ fn parse_segment(segment: &str) -> CommandSegment {
     let mut input_file = None;
     let mut output_file = None;
     let mut append_mode = false;
-    
+
     let mut pending_redirect = RedirectionType::None;
-    
+
     for part in parts {
         match pending_redirect {
             RedirectionType::Output(_) => {
                 output_file = Some(part.to_string());
                 pending_redirect = RedirectionType::None;
-            },
+            }
             RedirectionType::Append(_) => {
                 output_file = Some(part.to_string());
                 append_mode = true;
                 pending_redirect = RedirectionType::None;
-            },
+            }
             RedirectionType::Input(_) => {
                 input_file = Some(part.to_string());
                 pending_redirect = RedirectionType::None;
-            },
+            }
             RedirectionType::None => {
                 if part == ">" {
                     pending_redirect = RedirectionType::Output(String::new());
@@ -104,7 +103,7 @@ fn parse_segment(segment: &str) -> CommandSegment {
             }
         }
     }
-    
+
     CommandSegment { cmd, args, input_file, output_file, append_mode }
 }
 
@@ -160,7 +159,7 @@ pub unsafe extern "C" fn main(_argc: i32, _argv: *const *const u8) -> i32 {
             if b == b'\r' || b == b'\n' {
                 std::os::file_write(STDOUT_FD, b"\n");
                 let line = cmd_buffer.trim();
-                
+
                 if !line.is_empty() {
                     let logic_segments: Vec<&str> = line.split("&&").collect();
                     let mut last_command_exit_code = 0;
@@ -184,14 +183,14 @@ pub unsafe extern "C" fn main(_argc: i32, _argv: *const *const u8) -> i32 {
                             if let Some(infile) = parsed.input_file {
                                 let path = resolve_path(&shell_state.cwd, &infile);
                                 if let Ok(f) = std::fs::File::open(&path) {
-                                    stdin_fd = f.as_raw_fd(); 
-                                    core::mem::forget(f); 
+                                    stdin_fd = f.as_raw_fd();
+                                    core::mem::forget(f);
                                     close_stdin = true;
                                 } else {
                                     let err = format!("Failed to open input: {}\n", path);
                                     std::os::file_write(STDOUT_FD, err.as_bytes());
                                     last_command_exit_code = 1;
-                                    break; 
+                                    break;
                                 }
                             } else if let Some(fd) = prev_pipe_read {
                                 stdin_fd = fd as usize;
@@ -214,11 +213,11 @@ pub unsafe extern "C" fn main(_argc: i32, _argv: *const *const u8) -> i32 {
                                     Ok(f) => {
                                         stdout_fd = f.as_raw_fd();
                                         if parsed.append_mode {
-                                            std::os::file_seek(stdout_fd, 0, 2); 
+                                            std::os::file_seek(stdout_fd, 0, 2);
                                         }
                                         core::mem::forget(f);
                                         close_stdout = true;
-                                    },
+                                    }
                                     Err(_) => {
                                         let err = format!("Failed to open output: {}\n", path);
                                         std::os::file_write(STDOUT_FD, err.as_bytes());
@@ -259,12 +258,12 @@ pub unsafe extern "C" fn main(_argc: i32, _argv: *const *const u8) -> i32 {
                                         prog_path = p;
                                         found = true;
                                     } else {
-                                         // Try with .elf extension
-                                         let p_elf = format!("{}.elf", p);
-                                         if let Ok(_) = std::fs::File::open(&p_elf) {
-                                             prog_path = p_elf;
-                                             found = true;
-                                         }
+                                        // Try with .elf extension
+                                        let p_elf = format!("{}.elf", p);
+                                        if let Ok(_) = std::fs::File::open(&p_elf) {
+                                            prog_path = p_elf;
+                                            found = true;
+                                        }
                                     }
                                 } else {
                                     // Use PATH
@@ -273,7 +272,7 @@ pub unsafe extern "C" fn main(_argc: i32, _argv: *const *const u8) -> i32 {
                                             let mut base_p = String::from(dir);
                                             if !base_p.ends_with('/') { base_p.push('/'); }
                                             base_p.push_str(&parsed.cmd);
-                                            
+
                                             // 1. Try name.elf directly in the PATH dir
                                             let p_elf = format!("{}.elf", base_p);
                                             if let Ok(_) = std::fs::File::open(&p_elf) {
@@ -374,15 +373,15 @@ pub unsafe extern "C" fn main(_argc: i32, _argv: *const *const u8) -> i32 {
                         }
                     }
                 }
-                
+
                 cmd_buffer.clear();
                 std::os::file_write(STDOUT_FD, b"> ");
-            } else if b == 0x08 || b == 0x7F { 
+            } else if b == 0x08 || b == 0x7F {
                 if !cmd_buffer.is_empty() {
                     cmd_buffer.pop();
-                    std::os::file_write(STDOUT_FD, b"\x08 \x08"); 
+                    std::os::file_write(STDOUT_FD, b"\x08 \x08");
                 }
-            } else if c >= ' ' && c != '\x7F' { 
+            } else if c >= ' ' && c != '\x7F' {
                 cmd_buffer.push(c);
                 std::os::file_write(STDOUT_FD, &[b]);
             }
@@ -407,7 +406,7 @@ fn execute_builtin(cmd: &str, args: &[String], cwd: &mut String, in_fd: usize, o
         return 0;
     } else if cmd == "osfetch" {
         let white = "\x1B[97m";
-        let blue = "\x1B[94m"; 
+        let blue = "\x1B[94m";
         let gray = "\x1B[90m";
         let reset = "\x1B[0m";
 
@@ -437,7 +436,7 @@ fn execute_builtin(cmd: &str, args: &[String], cwd: &mut String, in_fd: usize, o
 
         let screen_w = std::graphics::get_screen_width();
         let screen_h = std::graphics::get_screen_height();
-        
+
         let ticks = std::os::get_system_ticks();
         let total_seconds = ticks / 1000;
         let h = total_seconds / 3600;
@@ -462,11 +461,11 @@ fn execute_builtin(cmd: &str, args: &[String], cwd: &mut String, in_fd: usize, o
         ];
 
         let ascii_width = 40;
-        
+
         for i in 0..14 {
             let a_line = if i < ascii.len() { ascii[i] } else { "" };
             let i_line = if i < info.len() { &info[i] } else { "" };
-            
+
             let mut a_string = String::from(a_line);
             if a_string.chars().count() > ascii_width {
                 let mut new_s = String::new();
@@ -476,11 +475,11 @@ fn execute_builtin(cmd: &str, args: &[String], cwd: &mut String, in_fd: usize, o
                 }
                 a_string = new_s;
             }
-            
+
             while a_string.chars().count() < ascii_width {
                 a_string.push(' ');
             }
-            
+
             let msg = format!("{}{}{}  {}
 ", blue, a_string, reset, i_line);
             std::os::file_write(out_fd, msg.as_bytes());
@@ -489,45 +488,42 @@ fn execute_builtin(cmd: &str, args: &[String], cwd: &mut String, in_fd: usize, o
         return 0;
     } else if cmd == "cat" {
         if args.is_empty() {
-             
-             
-             
-             let mut buf = [0u8; 1024];
-             loop {
-                 let n = std::os::file_read(in_fd, &mut buf);
-                 if n == 0 { break; }
-                 std::os::file_write(out_fd, &buf[0..n]);
-             }
-             return 0;
+            let mut buf = [0u8; 1024];
+            loop {
+                let n = std::os::file_read(in_fd, &mut buf);
+                if n == 0 { break; }
+                std::os::file_write(out_fd, &buf[0..n]);
+            }
+            return 0;
         } else {
-             let mut success = true;
-             for arg in args {
-                 let path = resolve_path(cwd, arg);
-                 if let Ok(mut file) = std::fs::File::open(&path) {
-                     let mut buf = [0u8; 1024];
-                     loop {
-                         match file.read(&mut buf) {
-                             Ok(n) if n > 0 => { 
-                                 std::os::file_write(out_fd, &buf[0..n]); 
-                             },
-                             _ => break,
-                         }
-                     }
-                 } else {
-                     let err = format!("cat: {}: No such file\n", path);
-                     std::os::file_write(out_fd, err.as_bytes());
-                     success = false;
-                 }
-             }
-             return if success { 0 } else { 1 };
+            let mut success = true;
+            for arg in args {
+                let path = resolve_path(cwd, arg);
+                if let Ok(mut file) = std::fs::File::open(&path) {
+                    let mut buf = [0u8; 1024];
+                    loop {
+                        match file.read(&mut buf) {
+                            Ok(n) if n > 0 => {
+                                std::os::file_write(out_fd, &buf[0..n]);
+                            }
+                            _ => break,
+                        }
+                    }
+                } else {
+                    let err = format!("cat: {}: No such file\n", path);
+                    std::os::file_write(out_fd, err.as_bytes());
+                    success = false;
+                }
+            }
+            return if success { 0 } else { 1 };
         }
     } else if cmd == "clear" {
         std::os::file_write(out_fd, b"\x1B[2J\x1B[H");
         return 0;
     } else if cmd == "pwd" {
-         std::os::file_write(out_fd, cwd.as_bytes());
-         std::os::file_write(out_fd, b"\n");
-         return 0;
+        std::os::file_write(out_fd, cwd.as_bytes());
+        std::os::file_write(out_fd, b"\n");
+        return 0;
     } else if cmd == "ls" {
         let target = if args.is_empty() { cwd.as_str() } else { &args[0] };
         let full_path = resolve_path(cwd, target);
@@ -548,7 +544,7 @@ fn execute_builtin(cmd: &str, args: &[String], cwd: &mut String, in_fd: usize, o
                     std::os::file_write(out_fd, line.as_bytes());
                 }
                 return 0;
-            },
+            }
             Err(_) => {
                 let err = format!("ls: cannot access '{}': No such file\n", full_path);
                 std::os::file_write(out_fd, err.as_bytes());
@@ -557,8 +553,8 @@ fn execute_builtin(cmd: &str, args: &[String], cwd: &mut String, in_fd: usize, o
         }
     } else if cmd == "cd" {
         if args.is_empty() {
-             *cwd = String::from("@0xE0/");
-             return 0;
+            *cwd = String::from("@0xE0/");
+            return 0;
         } else {
             let mut new_path = resolve_path(cwd, &args[0]);
             if !new_path.ends_with('/') { new_path.push('/'); }
@@ -616,13 +612,13 @@ fn execute_builtin(cmd: &str, args: &[String], cwd: &mut String, in_fd: usize, o
         if args.len() >= 2 {
             let src_path = resolve_path(cwd, &args[0]);
             let dst_path = resolve_path(cwd, &args[1]);
-            
+
             if let Ok(mut src) = std::fs::File::open(&src_path) {
                 if let Ok(mut dst) = std::fs::File::create(&dst_path) {
                     let mut buf = [0u8; 1024];
                     loop {
                         match src.read(&mut buf) {
-                            Ok(n) if n > 0 => { dst.write(&buf[0..n]).ok(); },
+                            Ok(n) if n > 0 => { dst.write(&buf[0..n]).ok(); }
                             _ => break,
                         }
                     }

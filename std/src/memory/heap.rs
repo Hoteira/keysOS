@@ -1,10 +1,10 @@
+use super::malloc;
+use core::ptr::write_bytes;
 use core::{
     alloc::{GlobalAlloc, Layout},
     ptr::NonNull,
     sync::atomic::{AtomicBool, AtomicPtr, Ordering},
 };
-use core::ptr::write_bytes;
-use super::malloc;
 
 const MAGIC_USED: u32 = 0xDEAD_BEEF;
 
@@ -30,12 +30,9 @@ impl Free {
     }
 
     fn set_end(&mut self, end: *mut u8) {
-
         self.size = unsafe { end.offset_from(self.start()) as usize };
     }
 }
-
-
 
 impl Used {
     #[allow(dead_code)]
@@ -106,8 +103,8 @@ impl Allocator {
         for i in 0..REGION_COUNT {
             total_size += HEAP_REGIONS[i].end - HEAP_REGIONS[i].start;
         }
-        
-        let mut new_size = total_size; 
+
+        let mut new_size = total_size;
         if new_size < required_size {
             new_size = required_size.next_power_of_two();
         }
@@ -121,7 +118,7 @@ impl Allocator {
 
         // Add to regions
         if REGION_COUNT >= MAX_REGIONS { return false; } // Too many regions
-        
+
         // Zero the new memory (malloc syscall usually does this, but to be safe/consistent)
         write_bytes(ptr as *mut u8, 0, new_size);
 
@@ -134,10 +131,10 @@ impl Allocator {
         let ptr_usize = ptr as usize;
         let aligned_ptr_usize = align_up(ptr_usize, region_align);
         let adjustment = aligned_ptr_usize - ptr_usize;
-        
+
         if adjustment + size_of::<Free>() >= new_size {
-             // Should not happen with reasonable sizes
-             return false;
+            // Should not happen with reasonable sizes
+            return false;
         }
 
         let new_free_ptr = aligned_ptr_usize as *mut Free;
@@ -147,19 +144,19 @@ impl Allocator {
         // Insert into sorted free list
         let mut prev: *mut Free = core::ptr::null_mut();
         let mut current = self.first_free.load(Ordering::Acquire);
-        
+
         while !current.is_null() && (current as usize) < (new_free_ptr as usize) {
             prev = current;
             current = (*current).next;
         }
-        
+
         (*new_free_ptr).next = current;
         if prev.is_null() {
             self.first_free.store(new_free_ptr, Ordering::Release);
         } else {
             (*prev).next = new_free_ptr;
         }
-        
+
         true
     }
 }
@@ -205,7 +202,7 @@ pub fn init(base: *mut u8, size: usize) {
     }
 
     let heap_start_ptr = aligned_base_usize as *mut u8;
-    
+
     // Register the first region
     unsafe {
         if REGION_COUNT < MAX_REGIONS {
@@ -333,7 +330,6 @@ unsafe impl GlobalAlloc for Allocator {
                     let header_ptr = get_used_header(payload_ptr);
                     let old_end = cur.end();
 
-
                     cur.set_end(header_ptr as *mut u8);
 
                     (*header_ptr).magic = MAGIC_USED;
@@ -369,7 +365,7 @@ unsafe impl GlobalAlloc for Allocator {
                 prev_ptr = cur_ptr;
                 cur_ptr = (*cur_ptr).next;
             }
-            
+
             // If allocation failed, try to grow
             if !self.grow_heap(needed_total) {
                 break; // OOM
@@ -394,7 +390,7 @@ unsafe impl GlobalAlloc for Allocator {
 
         let hdr = get_used_header(ptr);
 
-        if !in_heap_bounds(hdr as *const u8) || (hdr as usize) % align_of::<Used>() != 0  {
+        if !in_heap_bounds(hdr as *const u8) || (hdr as usize) % align_of::<Used>() != 0 {
             self.unlock();
             panic!("dealloc: invalid header location");
         }

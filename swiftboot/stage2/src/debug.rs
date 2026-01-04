@@ -18,7 +18,6 @@ pub fn debug(s: &str) {
     }
 }
 
-
 pub fn outb(port: u16, value: u8) {
     unsafe {
         asm!(

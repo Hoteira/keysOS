@@ -1,12 +1,9 @@
-
-
 use crate::drivers::port::{inb, outb};
 use alloc::collections::VecDeque;
 use std::sync::Mutex;
 
 #[allow(dead_code)]
 pub static KEYBOARD_BUFFER: Mutex<VecDeque<u32>> = Mutex::new(VecDeque::new());
-
 
 pub const KEY_LEFT: u32 = 0x110001;
 pub const KEY_RIGHT: u32 = 0x110002;
@@ -18,14 +15,12 @@ pub const KEY_CTRL: u32 = 0x110005;
 pub const KEY_ALT: u32 = 0x110006;
 pub const KEY_SHIFT: u32 = 0x110007;
 
-
 #[allow(dead_code)]
 const DATA_PORT: u16 = 0x60;
 #[allow(dead_code)]
 const STATUS_PORT: u16 = 0x64;
 #[allow(dead_code)]
 const COMMAND_PORT: u16 = 0x64;
-
 
 #[allow(dead_code)]
 const PS2_CMD_READ_CONFIG: u8 = 0x20;
@@ -36,25 +31,20 @@ const PS2_CMD_DISABLE_PORT1: u8 = 0xAD;
 #[allow(dead_code)]
 const PS2_CMD_ENABLE_PORT1: u8 = 0xAE;
 #[allow(dead_code)]
-const PS2_CMD_DISABLE_PORT2: u8 = 0xA7; 
+const PS2_CMD_DISABLE_PORT2: u8 = 0xA7;
 #[allow(dead_code)]
-const PS2_CMD_ENABLE_PORT2: u8 = 0xA8; 
+const PS2_CMD_ENABLE_PORT2: u8 = 0xA8;
 #[allow(dead_code)]
 const PS2_CMD_TEST_PORT1: u8 = 0xAB;
 #[allow(dead_code)]
-const PS2_CMD_TEST_PORT2: u8 = 0xA9; 
+const PS2_CMD_TEST_PORT2: u8 = 0xA9;
 #[allow(dead_code)]
 const PS2_CMD_TEST_CONTROLLER: u8 = 0xAA;
 #[allow(dead_code)]
 const PS2_CMD_RESET_DEVICE: u8 = 0xFF;
 
-
 #[allow(dead_code)]
 const KEYBOARD_CMD_ENABLE_SCANNING: u8 = 0xF4;
-
-
-
-
 
 const SCANCODE_MAP_LOWERCASE: [char; 128] = [
     '\0', '\x1B', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '\'', 'ì', '\x08', '\t',
@@ -186,52 +176,45 @@ pub fn handle_scancode(scancode: u8) -> Option<(u32, bool)> {
                 SUPER_ACTIVE = pressed;
                 if pressed { crate::debugln!("Global Shortcut: Super Key Pressed"); }
                 None
-            },
+            }
 
-            
             0x38 => {
                 ALT_ACTIVE = pressed;
                 Some((KEY_ALT, pressed))
-            },
+            }
 
-            
-            0x2A | 0x36 => { 
+            0x2A | 0x36 => {
                 SHIFT_ACTIVE = pressed;
                 Some((KEY_SHIFT, pressed))
-            },
+            }
 
-            
             0x1D => {
                 Some((KEY_CTRL, pressed))
-            },
-            
-            
-            0x0E => Some((KEY_BACKSPACE, pressed)), 
-            0x1C => Some((KEY_ENTER, pressed)), 
-            0x39 => Some((' ' as u32, pressed)), 
-            0x01 => Some(('\x1B' as u32, pressed)), 
-            0x0F => Some(('\t' as u32, pressed)), 
-            
-            
+            }
+
+            0x0E => Some((KEY_BACKSPACE, pressed)),
+            0x1C => Some((KEY_ENTER, pressed)),
+            0x39 => Some((' ' as u32, pressed)),
+            0x01 => Some(('\x1B' as u32, pressed)),
+            0x0F => Some(('\t' as u32, pressed)),
+
             0x4B if is_e0 => Some((KEY_LEFT, pressed)),
             0x4D if is_e0 => Some((KEY_RIGHT, pressed)),
             0x48 if is_e0 => Some((KEY_UP, pressed)),
             0x50 if is_e0 => Some((KEY_DOWN, pressed)),
 
-            
             0x56 => {
                 if SHIFT_ACTIVE {
                     Some(('>' as u32, pressed))
                 } else {
                     Some(('<' as u32, pressed))
                 }
-            },
+            }
 
-            
-            0x02..=0x0D | 
-            0x10..=0x1B | 
-            0x1E..=0x28 | 
-            0x2B..=0x35 | 
+            0x02..=0x0D |
+            0x10..=0x1B |
+            0x1E..=0x28 |
+            0x2B..=0x35 |
             0x3A => {
                 if scancode_val < 128 {
                     let c = if ALT_ACTIVE {
@@ -245,7 +228,7 @@ pub fn handle_scancode(scancode: u8) -> Option<(u32, bool)> {
                 } else {
                     None
                 }
-            },
+            }
             _ => None,
         }
     }

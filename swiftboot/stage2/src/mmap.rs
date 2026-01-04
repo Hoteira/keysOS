@@ -1,5 +1,5 @@
-use core::arch::asm;
 use crate::BOOT;
+use core::arch::asm;
 
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
@@ -16,7 +16,6 @@ pub struct MemoryMap {
     pub entries: [MemoryMapEntry; 32],
 }
 
-
 #[inline(never)]
 pub fn get_mmap() {
     let mut cont_id: u32 = 0;
@@ -27,13 +26,12 @@ pub fn get_mmap() {
     loop {
         unsafe {
             asm!(
-                "int 0x15",
-                inout("eax") 0xE820 => _signature,
-                inout("ecx") 24 => _bytes,
-                inout("ebx") cont_id,
-
-                in("edx") 0x534D4150,
-                in("edi") &mut BOOT.mmap.entries[entries as usize] as *mut MemoryMapEntry,
+            "int 0x15",
+            inout("eax") 0xE820 => _signature,
+            inout("ecx") 24 => _bytes,
+            inout("ebx") cont_id,
+            in("edx") 0x534D4150,
+            in("edi") &mut BOOT.mmap.entries[entries as usize] as *mut MemoryMapEntry,
             );
         }
 
@@ -48,4 +46,3 @@ pub fn get_mmap() {
         }
     }
 }
-

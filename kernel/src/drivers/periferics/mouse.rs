@@ -4,7 +4,7 @@ use crate::println;
 pub const MOUSE_INT: u8 = 44;
 pub static mut MOUSE_PACKET: [u8; 4] = [0; 4];
 pub static mut MOUSE_IDX: usize = 0;
-pub static mut MOUSE_PACKET_SIZE: usize = 3; 
+pub static mut MOUSE_PACKET_SIZE: usize = 3;
 
 const CMD_ENABLE_AUX: u8 = 0xA8;
 const CMD_GET_COMPAQ_STATUS: u8 = 0x20;
@@ -27,8 +27,8 @@ pub fn init_mouse() {
     outb(0x64, CMD_GET_COMPAQ_STATUS);
     wait_read();
     let mut status = inb(0x60);
-    status |= 2; 
-    status &= !0x20; 
+    status |= 2;
+    status &= !0x20;
     wait_write();
     outb(0x64, CMD_SET_COMPAQ_STATUS);
     wait_write();
@@ -36,21 +36,29 @@ pub fn init_mouse() {
 
     mouse_write(MOUSE_RESET);
     let _r1 = mouse_read();
-    let _r2 = mouse_read(); 
-    
+    let _r2 = mouse_read();
+
     mouse_write(MOUSE_SET_DEFAULTS);
     let _ack = mouse_read();
 
-    mouse_write(MOUSE_SET_SAMPLE_RATE); let _ = mouse_read(); mouse_write(200); let _ = mouse_read();
-    mouse_write(MOUSE_SET_SAMPLE_RATE); let _ = mouse_read(); mouse_write(100); let _ = mouse_read();
-    mouse_write(MOUSE_SET_SAMPLE_RATE); let _ = mouse_read(); mouse_write(80);  let _ = mouse_read();
+    mouse_write(MOUSE_SET_SAMPLE_RATE);
+    let _ = mouse_read();
+    mouse_write(200);
+    let _ = mouse_read();
+    mouse_write(MOUSE_SET_SAMPLE_RATE);
+    let _ = mouse_read();
+    mouse_write(100);
+    let _ = mouse_read();
+    mouse_write(MOUSE_SET_SAMPLE_RATE);
+    let _ = mouse_read();
+    mouse_write(80);
+    let _ = mouse_read();
 
     mouse_write(MOUSE_GET_ID);
     let _ack = mouse_read();
     let id = mouse_read();
-    
+
     unsafe {
-        
         MOUSE_PACKET_SIZE = 4;
         println!("Mouse: ID: {}. Forcing 4-byte packet mode (Scroll Enabled).", id);
     }
@@ -114,7 +122,6 @@ pub const CURSOR_BUFFER: [u32; 24 * 24] = [
     0xffffffff, 0xffe1e1e1, 0xffffffff, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
     0xffffffff, 0xffffffff, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
     0xffffffff, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000
-
 ];
 
 pub const CURSOR_WIDTH: usize = CURSOR_BUFFER.len().isqrt();

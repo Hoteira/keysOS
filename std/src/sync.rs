@@ -1,5 +1,5 @@
-use core::sync::atomic::{AtomicBool, Ordering};
 use core::cell::UnsafeCell;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 pub struct Mutex<T> {
     lock: AtomicBool,
@@ -91,7 +91,6 @@ impl<'a, T> Drop for IntMutexGuard<'a, T> {
     fn drop(&mut self) {
         self.lock.store(false, Ordering::Release);
         unsafe {
-            
             if (self.rflags & 0x200) != 0 {
                 core::arch::asm!("sti");
             }

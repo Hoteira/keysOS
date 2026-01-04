@@ -1,8 +1,9 @@
 use core::ffi::{c_char, c_int, c_long, c_void};
-use crate::string::strlen;
 
 #[repr(C)]
-pub struct DIR { pub fd: c_int }
+pub struct DIR {
+    pub fd: c_int,
+}
 
 #[repr(C)]
 pub struct dirent {
@@ -36,6 +37,12 @@ pub unsafe extern "C" fn closedir(dirp: *mut DIR) -> c_int {
     let fd = (*dirp).fd;
     crate::stdlib::free(dirp as *mut c_void);
     crate::unistd::close(fd)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn mkdir(path: *const c_char, _mode: c_int) -> c_int {
+    let resolved = crate::misc::resolve_path_rust(path);
+    if std::os::syscall(72, resolved.as_ptr() as u64, resolved.len() as u64, 0) == 0 { 0 } else { -1 }
 }
 
 #[unsafe(no_mangle)]

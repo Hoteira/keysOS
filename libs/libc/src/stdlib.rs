@@ -1,9 +1,10 @@
-use core::ffi::{c_void, c_int, c_long};
 use core::alloc::Layout;
-use crate::string::strlen;
+use core::ffi::{c_int, c_long, c_void};
 
 #[repr(C)]
-struct Header { size: usize }
+struct Header {
+    size: usize,
+}
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn malloc(size: usize) -> *mut c_void {
@@ -59,12 +60,16 @@ pub unsafe extern "C" fn strtol(s: *const core::ffi::c_char, endptr: *mut *mut c
     let mut res: i64 = 0;
     let mut p = s;
     let mut neg = false;
-    if *p == b'-' as i8 { neg = true; p = p.add(1); }
-    else if *p == b'+' as i8 { p = p.add(1); }
+    if *p == b'-' as i8 {
+        neg = true;
+        p = p.add(1);
+    } else if *p == b'+' as i8 { p = p.add(1); }
     let b = if base == 0 {
         if *p == b'0' as i8 {
-            if *p.add(1) == b'x' as i8 || *p.add(1) == b'X' as i8 { p = p.add(2); 16 }
-            else { 8 }
+            if *p.add(1) == b'x' as i8 || *p.add(1) == b'X' as i8 {
+                p = p.add(2);
+                16
+            } else { 8 }
         } else { 10 }
     } else { base as u64 };
     loop {
@@ -91,17 +96,33 @@ pub unsafe extern "C" fn atof(s: *const core::ffi::c_char) -> f64 {
     let mut dot = false;
     while *p != 0 {
         let c = *p as u8;
-        if c == b'.' { dot = true; }
-        else if c >= b'0' && c <= b'9' {
-            if !dot { res = res * 10.0 + (c - b'0') as f64; }
-            else { div *= 10.0; res += (c - b'0') as f64 / div; }
+        if c == b'.' { dot = true; } else if c >= b'0' && c <= b'9' {
+            if !dot { res = res * 10.0 + (c - b'0') as f64; } else {
+                div *= 10.0;
+                res += (c - b'0') as f64 / div;
+            }
         }
         p = p.add(1);
     }
     res
 }
 
-#[unsafe(no_mangle)] pub unsafe extern "C" fn abs(j: c_int) -> c_int { if j < 0 { -j } else { j } }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn abs(j: c_int) -> c_int { if j < 0 { -j } else { j } }
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn system(command: *const core::ffi::c_char) -> c_int {
+    if command.is_null() { return 1; }
+    let s = core::str::from_utf8_unchecked(core::slice::from_raw_parts(command as *const u8, crate::string::strlen(command)));
+    std::os::exec(s);
+    0
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn putenv(_string: *mut core::ffi::c_char) -> c_int {
+    // Stub
+    0
+}
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn exit(status: c_int) -> ! {

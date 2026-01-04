@@ -2,13 +2,12 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::arch::{asm, naked_asm};
 
-use crate::memory::pmm;
 use crate::debugln;
+use crate::memory::pmm;
 
 #[allow(dead_code)]
 const STACK_SIZE: u64 = 64 * 1024;
 pub(crate) const MAX_TASKS: usize = 125;
-
 
 #[derive(Clone, Debug)]
 #[repr(C, align(16))]
@@ -80,9 +79,26 @@ pub(crate) const NULL_TASK: Task = Task {
     pending_signals: 0,
     signal_handlers: [0; 64],
     saved_cpu_state: CPUState {
-        r15: 0, r14: 0, r13: 0, r12: 0, r11: 0, r10: 0, r9: 0, r8: 0,
-        rdi: 0, rsi: 0, rdx: 0, rcx: 0, rbx: 0, rax: 0, rbp: 0,
-        rip: 0, cs: 0, rflags: 0, rsp: 0, ss: 0,
+        r15: 0,
+        r14: 0,
+        r13: 0,
+        r12: 0,
+        r11: 0,
+        r10: 0,
+        r9: 0,
+        r8: 0,
+        rdi: 0,
+        rsi: 0,
+        rdx: 0,
+        rcx: 0,
+        rbx: 0,
+        rax: 0,
+        rbp: 0,
+        rip: 0,
+        cs: 0,
+        rflags: 0,
+        rsp: 0,
+        ss: 0,
     },
     in_signal_handler: false,
     env: Vec::new(),
@@ -104,10 +120,10 @@ impl Task {
         self.cwd = String::from("@0xE0/");
         let len = core::cmp::min(name.len(), 32);
         self.name[..len].copy_from_slice(&name[..len]);
-        
+
         self.fpu_state[0] = 0x7F;
         self.fpu_state[1] = 0x03;
-        
+
         self.fpu_state[24] = 0x80;
         self.fpu_state[25] = 0x1F;
 
@@ -157,7 +173,7 @@ impl Task {
         self.signal_handlers = [0; 64];
         self.in_signal_handler = false;
         self.env = Vec::new();
-        
+
         self.cwd = if let Some(c) = cwd {
             c
         } else {
@@ -174,7 +190,6 @@ impl Task {
 
         self.pml4_phys = pml4_phys;
 
-        
         let k_frame = match pmm::allocate_frames(16, pid) {
             Some(addr) => addr,
             None => return Err(pmm::FrameError::NoMemory),
@@ -184,7 +199,7 @@ impl Task {
         let u_frame = match pmm::allocate_frames(16, pid) {
             Some(addr) => addr,
             None => {
-                pmm::free_frame(k_frame); 
+                pmm::free_frame(k_frame);
                 return Err(pmm::FrameError::NoMemory);
             }
         };
@@ -318,7 +333,7 @@ impl TaskManager {
             let task = &mut self.tasks[pid as usize];
             if task.state != TaskState::Null && task.state != TaskState::Zombie {
                 if sig == 9 { // SIGKILL
-                    task.exit_code = 0xDEAD; 
+                    task.exit_code = 0xDEAD;
                     task.state = TaskState::Zombie;
 
                     unsafe {
@@ -346,16 +361,14 @@ impl TaskManager {
     pub fn init_user_task(&mut self, slot: usize, entry_point: u64, pml4_phys: u64, args: Option<Vec<String>>, fd_table: Option<[i16; 16]>, name: &[u8], env: Option<Vec<String>>, cwd: Option<String>) -> Result<(), pmm::FrameError> {
         if slot >= MAX_TASKS { return Err(pmm::FrameError::IndexOutOfBounds); }
 
-        
         match self.tasks[slot].init_user(entry_point, pml4_phys, args, slot as u64, fd_table, name, cwd) {
             Ok(_) => {
                 if let Some(e) = env {
                     self.tasks[slot].env = e;
                 }
                 Ok(())
-            },
+            }
             Err(e) => {
-                
                 self.tasks[slot].state = TaskState::Null;
                 self.task_count -= 1;
                 Err(e)
@@ -382,7 +395,7 @@ impl TaskManager {
         }
 
         let task_idx = self.current_task as usize;
-        
+
         // Signal Handling
         if self.tasks[task_idx].pending_signals != 0 && !self.tasks[task_idx].in_signal_handler {
             for sig in 1..64 {
@@ -393,15 +406,15 @@ impl TaskManager {
                         let current_state_ptr = self.tasks[task_idx].cpu_state_ptr as *const CPUState;
                         unsafe {
                             self.tasks[task_idx].saved_cpu_state = *current_state_ptr;
-                            
+
                             // Redirect to handler
                             let state_mut = self.tasks[task_idx].cpu_state_ptr as *mut CPUState;
                             (*state_mut).rip = handler;
                             (*state_mut).rdi = sig as u64; // First argument: signal number
-                            
+
                             // We need to push the return address or something to return from signal?
                             // For now, let's assume they call a syscall to return.
-                            
+
                             self.tasks[task_idx].in_signal_handler = true;
                             self.tasks[task_idx].pending_signals &= !(1 << sig);
                         }
@@ -409,7 +422,7 @@ impl TaskManager {
                     } else if handler == 0 {
                         // Default action for many signals is terminate
                         if sig == 2 || sig == 15 || sig == 3 { // SIGINT, SIGTERM, SIGQUIT
-                             self.kill_process(task_idx as u64, 9);
+                            self.kill_process(task_idx as u64, 9);
                         }
                     }
                 }
@@ -560,7 +573,6 @@ pub extern "C" fn yield_handler() {
     }
 }
 
-
 #[unsafe(no_mangle)]
 pub static mut SYSTEM_TICKS: u64 = 0;
 
@@ -577,11 +589,10 @@ pub extern "C" fn switch_yield(rsp: u64) -> u64 {
 unsafe fn common_switch(rsp: u64, is_timer: bool) -> u64 {
     unsafe {
         if is_timer {
-            SYSTEM_TICKS = SYSTEM_TICKS.wrapping_add(10); 
+            SYSTEM_TICKS = SYSTEM_TICKS.wrapping_add(10);
         }
         let mut tm = TASK_MANAGER.int_lock();
 
-        
         if tm.current_task >= 0 {
             let index = tm.current_task as usize;
             let task_ptr = &mut tm.tasks[index] as *mut Task;
@@ -591,7 +602,6 @@ unsafe fn common_switch(rsp: u64, is_timer: bool) -> u64 {
 
         let (new_state, k_stack, _pml4_phys) = tm.schedule(rsp as *mut CPUState);
 
-        
         if tm.current_task >= 0 {
             let index = tm.current_task as usize;
             let task_ptr = &tm.tasks[index] as *const Task;

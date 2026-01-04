@@ -3,7 +3,7 @@ use crate::interrupts::task::CPUState;
 pub fn sys_malloc(context: &mut CPUState) {
     let size = context.rdi as usize;
     let pages = (size + 4095) / 4096;
-    
+
     let pid = {
         let tm = crate::interrupts::task::TASK_MANAGER.int_lock();
         if tm.current_task >= 0 {
