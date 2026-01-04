@@ -349,11 +349,14 @@ pub unsafe extern "C" fn main(_argc: i32, _argv: *const *const u8) -> i32 {
                                     break status;
                                 }
 
-                                // Check for interrupt from terminal
-                                let mut ctrl_buf = [0u8; 1];
-                                if std::os::file_read(STDIN_FD, &mut ctrl_buf) > 0 {
-                                    if ctrl_buf[0] == 0x03 { // Ctrl+C
-                                        std::os::kill(pid, 2); // SIGINT
+                                // Check for interrupt from terminal without blocking
+                                let mut pfd = [std::os::PollFd { fd: STDIN_FD as i32, events: std::os::POLLIN, revents: 0 }];
+                                if std::os::poll(&mut pfd, 0) > 0 {
+                                    let mut ctrl_buf = [0u8; 1];
+                                    if std::os::file_read(STDIN_FD, &mut ctrl_buf) > 0 {
+                                        if ctrl_buf[0] == 0x03 { // Ctrl+C
+                                            std::os::kill(pid, 2); // SIGINT
+                                        }
                                     }
                                 }
 

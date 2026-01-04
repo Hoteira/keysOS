@@ -66,7 +66,7 @@ pub fn sys_waitpid(context: &mut CPUState) {
     let mut tm = TASK_MANAGER.int_lock();
     if target_pid < MAX_TASKS {
         match tm.tasks[target_pid].state {
-            TaskState::Ready | TaskState::Reserved => {
+            TaskState::Ready | TaskState::Reserved | TaskState::Sleeping => {
                 context.rax = u64::MAX;
             }
             TaskState::Zombie => {
@@ -92,8 +92,9 @@ pub fn sys_waitpid(context: &mut CPUState) {
 
 pub fn sys_kill(context: &mut CPUState) {
     let pid = context.rdi as u64;
+    let sig = context.rsi as i32;
     let mut tm = TASK_MANAGER.int_lock();
-    tm.kill_process(pid, 9);
+    tm.kill_process(pid, sig);
     context.rax = 0;
 }
 
@@ -133,7 +134,17 @@ pub fn sys_get_process_list(context: &mut CPUState) {
     context.rax = count as u64;
 }
 
-pub fn spawn_process(path: &str, fd_inheritance: Option<&[(u8, u8)]>) -> Result<u64, String> {
+pub fn spawn_process(full_path: &str, fd_inheritance: Option<&[(u8, u8)]>) -> Result<u64, String> {
+    let mut parts_iter = full_path.split_whitespace();
+    let path = parts_iter.next().ok_or_else(|| String::from("Empty path"))?;
+    
+    // argc/argv: argv[0] should be the program name/path
+    let mut args: Vec<String> = Vec::new();
+    args.push(String::from(path));
+    for arg in parts_iter {
+        args.push(String::from(arg));
+    }
+
     let path_parts: Vec<&str> = path.split('/').collect();
     if path_parts.len() < 1 || !path_parts[0].starts_with('@') {
         return Err(String::from("Invalid path format"));
@@ -199,7 +210,7 @@ pub fn spawn_process(path: &str, fd_inheritance: Option<&[(u8, u8)]>) -> Result<
 
             let init_res = {
                 let mut tm = TASK_MANAGER.int_lock();
-                tm.init_user_task(pid_idx, entry_point, pml4_phys, None, Some(new_fd_table), process_name_bytes, None, None)
+                tm.init_user_task(pid_idx, entry_point, pml4_phys, Some(args), Some(new_fd_table), process_name_bytes, None, None)
             };
 
             match init_res {

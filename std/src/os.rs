@@ -269,7 +269,7 @@ pub fn ioctl(fd: usize, request: u64, arg: u64) -> i32 {
 }
 
 pub fn kill(pid: usize, sig: i32) -> i32 {
-    unsafe { syscall(81, pid as u64, sig as u64, 0) as i32 }
+    unsafe { syscall(78, pid as u64, sig as u64, 0) as i32 }
 }
 
 pub fn stat(path: &str, buf: &mut [u64; 2]) -> i32 {
