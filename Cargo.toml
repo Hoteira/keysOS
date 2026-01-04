@@ -7,7 +7,7 @@ members = [
     "apps/tmap",
     "apps/cat",
     "apps/taskbar",
-    "libs/krake_libc",
+    "libs/libc",
     "elfic",
     "inkui",
     "kernel",

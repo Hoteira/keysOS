@@ -1,0 +1,1 @@
+#define REVISION "krakeos-port"

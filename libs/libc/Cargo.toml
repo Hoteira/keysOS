@@ -1,5 +1,5 @@
 [package]
-name = "krake_libc"
+name = "libc"
 version = "0.1.0"
 edition = "2024"
 

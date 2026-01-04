@@ -21,6 +21,7 @@ pub struct Task {
     pub exit_code: u64,
     pub wake_ticks: u64,
     pub name: [u8; 32],
+    pub cwd: [u8; 128],
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -69,6 +70,7 @@ pub(crate) static NULL_TASK: Task = Task {
     exit_code: 0,
     wake_ticks: 0,
     name: [0; 32],
+    cwd: [0; 128],
 };
 
 impl Task {
@@ -82,7 +84,12 @@ impl Task {
         let len = core::cmp::min(name.len(), 32);
         self.name[..len].copy_from_slice(&name[..len]);
         
+        self.cwd = [0; 128];
+        let root = b"@0xE0/";
+        self.cwd[..root.len()].copy_from_slice(root);
+        
         self.fpu_state[0] = 0x7F;
+
         self.fpu_state[1] = 0x03;
         
         self.fpu_state[24] = 0x80;
@@ -132,6 +139,10 @@ impl Task {
         self.name = [0; 32];
         let len = core::cmp::min(name.len(), 32);
         self.name[..len].copy_from_slice(&name[..len]);
+
+        self.cwd = [0; 128];
+        let root = b"@0xE0/";
+        self.cwd[..root.len()].copy_from_slice(root);
 
         self.fpu_state[0] = 0x7F;
         self.fpu_state[1] = 0x03;
