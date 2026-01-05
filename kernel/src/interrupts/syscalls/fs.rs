@@ -800,3 +800,63 @@ pub fn handle_seek(context: &mut CPUState) {
         context.rax = u64::MAX;
     }
 }
+
+pub const TIOCGWINSZ: u64 = 0x5413;
+pub const TIOCSWINSZ: u64 = 0x5414;
+
+#[repr(C)]
+pub struct WinSize {
+    pub ws_row: u16,
+    pub ws_col: u16,
+    pub ws_xpixel: u16,
+    pub ws_ypixel: u16,
+}
+
+pub fn handle_ioctl(context: &mut CPUState) {
+    let _fd = context.rdi;
+    let request = context.rsi;
+    let arg = context.rdx as *mut WinSize;
+
+    match request {
+        TIOCGWINSZ => {
+            let tm = crate::interrupts::task::TASK_MANAGER.int_lock();
+            if tm.current_task >= 0 {
+                let task = &tm.tasks[tm.current_task as usize];
+                if !arg.is_null() {
+                    unsafe {
+                        (*arg).ws_row = task.terminal_height;
+                        (*arg).ws_col = task.terminal_width;
+                        (*arg).ws_xpixel = 0;
+                        (*arg).ws_ypixel = 0;
+                    }
+                    context.rax = 0;
+                } else {
+                    context.rax = u64::MAX;
+                }
+            } else {
+                context.rax = u64::MAX;
+            }
+        }
+        TIOCSWINSZ => {
+            let mut tm = crate::interrupts::task::TASK_MANAGER.int_lock();
+            let current = tm.current_task;
+            if current >= 0 {
+                let task = &mut tm.tasks[current as usize];
+                if !arg.is_null() {
+                    unsafe {
+                        task.terminal_height = (*arg).ws_row;
+                        task.terminal_width = (*arg).ws_col;
+                    }
+                    context.rax = 0;
+                } else {
+                    context.rax = u64::MAX;
+                }
+            } else {
+                context.rax = u64::MAX;
+            }
+        }
+        _ => {
+            context.rax = u64::MAX;
+        }
+    }
+}

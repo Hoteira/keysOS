@@ -110,7 +110,16 @@ pub unsafe extern "C" fn getopt_long(_argc: c_int, _argv: *mut *mut c_char, _opt
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn mkstemps(_template: *mut c_char, _suffix_len: c_int) -> c_int { -1 }
+pub unsafe extern "C" fn mkstemps(template: *mut c_char, suffix_len: c_int) -> c_int {
+    let len = crate::string::strlen(template);
+    if len < (6 + suffix_len as usize) { return -1; }
+    let start = len - 6 - suffix_len as usize;
+    for i in 0..6 {
+        *template.add(start + i) = b'0' as c_char;
+    }
+    // O_RDWR (2) | O_CREAT (64) | O_EXCL (128) = 194
+    crate::unistd::open(template, 194, 0o600)
+}
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn realpath(path: *const c_char, resolved_path: *mut c_char) -> *mut c_char {

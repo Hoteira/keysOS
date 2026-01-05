@@ -1,5 +1,5 @@
 use crate::sys::krake_sleep;
-use core::ffi::{c_char, c_int, c_long, c_uint, c_void};
+use core::ffi::{c_char, c_int, c_long, c_uint, c_ulong, c_void};
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn usleep(usec: c_uint) -> c_int {
@@ -31,6 +31,12 @@ pub unsafe extern "C" fn open(path: *const c_char, _flags: c_int, _mode: c_int) 
             -1
         }
     }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ioctl(fd: c_int, request: c_ulong, mut args: ...) -> c_int {
+    let arg = args.arg::<u64>();
+    std::os::syscall(16, fd as u64, request as u64, arg) as c_int
 }
 
 #[unsafe(no_mangle)]

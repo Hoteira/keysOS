@@ -23,10 +23,10 @@ extern WINDOW *stdscr;
 
 /* Attributes */
 #define A_NORMAL 0
-#define A_REVERSE 1
-#define A_BOLD 2
-#define A_STANDOUT 4
-#define A_UNDERLINE 8
+#define A_REVERSE 0x00010000
+#define A_BOLD    0x00020000
+#define A_STANDOUT 0x00040000
+#define A_UNDERLINE 0x00080000
 
 /* Colors */
 #define COLOR_BLACK 0

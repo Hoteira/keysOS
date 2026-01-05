@@ -21,9 +21,12 @@ pub struct Task {
     pub wake_ticks: u64,
     pub name: [u8; 32],
     pub cwd: [u8; 128],
+    pub terminal_width: u16,
+    pub terminal_height: u16,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[repr(u64)]
 pub enum TaskState {
     Null,
     Reserved,
@@ -70,6 +73,8 @@ pub(crate) static NULL_TASK: Task = Task {
     wake_ticks: 0,
     name: [0; 32],
     cwd: [0; 128],
+    terminal_width: 80,
+    terminal_height: 25,
 };
 
 impl Task {
@@ -82,6 +87,9 @@ impl Task {
         self.name = [0; 32];
         let len = core::cmp::min(name.len(), 32);
         self.name[..len].copy_from_slice(&name[..len]);
+
+        self.terminal_width = 80;
+        self.terminal_height = 25;
 
         self.cwd = [0; 128];
         let root = b"@0xE0/";
@@ -156,7 +164,7 @@ impl Task {
     }
 
     #[allow(dead_code)]
-    pub fn init_user(&mut self, entry_point: u64, pml4_phys: u64, args: Option<&[&str]>, pid: u64, fd_table: Option<[i16; 16]>, name: &[u8]) -> Result<(), pmm::FrameError> {
+    pub fn init_user(&mut self, entry_point: u64, pml4_phys: u64, args: Option<&[&str]>, pid: u64, fd_table: Option<[i16; 16]>, name: &[u8], terminal_size: (u16, u16)) -> Result<(), pmm::FrameError> {
         self.fpu_state = [0; 512];
         self.fd_table = fd_table.unwrap_or([-1; 16]);
         self.exit_code = 0;
@@ -164,6 +172,9 @@ impl Task {
         self.name = [0; 32];
         let len = core::cmp::min(name.len(), 32);
         self.name[..len].copy_from_slice(&name[..len]);
+
+        self.terminal_width = terminal_size.0;
+        self.terminal_height = terminal_size.1;
 
         self.cwd = [0; 128];
         let root = b"@0xE0/";
@@ -359,11 +370,11 @@ impl TaskManager {
     }
 
     #[allow(dead_code)]
-    pub fn init_user_task(&mut self, slot: usize, entry_point: u64, pml4_phys: u64, args: Option<&[&str]>, fd_table: Option<[i16; 16]>, name: &[u8]) -> Result<(), pmm::FrameError> {
+    pub fn init_user_task(&mut self, slot: usize, entry_point: u64, pml4_phys: u64, args: Option<&[&str]>, fd_table: Option<[i16; 16]>, name: &[u8], terminal_size: (u16, u16)) -> Result<(), pmm::FrameError> {
         if slot >= MAX_TASKS { return Err(pmm::FrameError::IndexOutOfBounds); }
 
 
-        match self.tasks[slot].init_user(entry_point, pml4_phys, args, slot as u64, fd_table, name) {
+        match self.tasks[slot].init_user(entry_point, pml4_phys, args, slot as u64, fd_table, name, terminal_size) {
             Ok(_) => Ok(()),
             Err(e) => {
                 self.tasks[slot].state = TaskState::Null;

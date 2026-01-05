@@ -146,6 +146,23 @@ pub fn pipe(fds: &mut [i32; 2]) -> i32 {
     }
 }
 
+#[repr(C)]
+pub struct WinSize {
+    pub ws_row: u16,
+    pub ws_col: u16,
+    pub ws_xpixel: u16,
+    pub ws_ypixel: u16,
+}
+
+pub const TIOCGWINSZ: u64 = 0x5413;
+pub const TIOCSWINSZ: u64 = 0x5414;
+
+pub fn ioctl(fd: usize, request: u64, arg: u64) -> i32 {
+    unsafe {
+        syscall(16, fd as u64, request, arg) as i32
+    }
+}
+
 pub fn file_close(fd: usize) -> i32 {
     unsafe {
         syscall(3, fd as u64, 0, 0) as i32

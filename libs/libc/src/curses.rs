@@ -60,6 +60,16 @@ pub unsafe extern "C" fn wmove(_win: *mut WINDOW, y: c_int, x: c_int) -> c_int {
     0
 }
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn werase(_win: *mut WINDOW) -> c_int {
+    std::os::print("\x1B[2J"); // Clear screen
+    std::os::print("\x1B[H");  // Move to 1,1
+    0
+}
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn wclear(_win: *mut WINDOW) -> c_int {
+    werase(_win)
+}
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn isendwin() -> c_int { 0 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn wclrtoeol(_win: *mut WINDOW) -> c_int {
@@ -105,7 +115,14 @@ pub struct WINDOW {
 static mut STD_WIN: WINDOW = WINDOW { _dummy: 0 };
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn initscr() -> *mut WINDOW { &raw mut STD_WIN }
+pub unsafe extern "C" fn initscr() -> *mut WINDOW { 
+    let mut ws = core::mem::zeroed::<crate::sys::winsize>();
+    if std::os::syscall(16, 0, 0x5413, &mut ws as *mut _ as u64) == 0 {
+        COLS = ws.ws_col as c_int;
+        LINES = ws.ws_row as c_int;
+    }
+    &raw mut STD_WIN 
+}
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cbreak() -> c_int { 0 }
 #[unsafe(no_mangle)]
@@ -128,7 +145,24 @@ pub unsafe extern "C" fn beep() -> c_int {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn doupdate() -> c_int { 0 }
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn curs_set(_visibility: c_int) -> c_int { 0 }
+pub unsafe extern "C" fn curs_set(visibility: c_int) -> c_int { 
+    if visibility == 0 {
+        std::os::print("\x1B[?25l"); // Hide
+    } else {
+        std::os::print("\x1B[?25h"); // Show
+    }
+    1 // Previous state (dummy)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn has_colors() -> bool { true }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn start_color() -> c_int { 0 }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn init_pair(_pair: c_int, _f: c_int, _b: c_int) -> c_int { 0 }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn use_default_colors() -> c_int { 0 }
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn endwin() -> c_int { 0 }
 #[unsafe(no_mangle)]
@@ -139,7 +173,9 @@ pub unsafe extern "C" fn wrefresh(_win: *mut WINDOW) -> c_int {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn waddch(_win: *mut WINDOW, ch: u32) -> c_int {
     let mut buf = [0u8; 4];
-    if let Some(c) = char::from_u32(ch) {
+    // Strip attributes (everything above 0xFF for now, or handle specifically)
+    let char_code = ch & 0xFF; 
+    if let Some(c) = char::from_u32(char_code) {
         let s = c.encode_utf8(&mut buf);
         std::os::print(s);
     }
@@ -158,9 +194,17 @@ pub unsafe extern "C" fn mvwaddch(_win: *mut WINDOW, _y: c_int, _x: c_int, ch: u
 
 // --- REGEX stubs ---
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn regcomp(_preg: *mut c_void, _regex: *const c_char, _cflags: c_int) -> c_int { 1 } // Fail
+pub unsafe extern "C" fn regcomp(_preg: *mut c_void, _regex: *const c_char, _cflags: c_int) -> c_int { 0 } // Success (fake)
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn regerror(_errcode: c_int, _preg: *const c_void, _errbuf: *mut c_char, _errbuf_size: usize) -> usize { 0 }
+pub unsafe extern "C" fn regerror(_errcode: c_int, _preg: *const c_void, _errbuf: *mut c_char, _errbuf_size: usize) -> usize { 
+    if _errbuf_size > 0 {
+        let msg = b"Regex error\0";
+        let len = core::cmp::min(_errbuf_size - 1, msg.len());
+        core::ptr::copy_nonoverlapping(msg.as_ptr(), _errbuf as *mut u8, len);
+        *(_errbuf.add(len)) = 0;
+    }
+    0 
+}
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn regfree(_preg: *mut c_void) {}
 
@@ -201,17 +245,20 @@ pub unsafe extern "C" fn waddnstr(_win: *mut WINDOW, s: *const c_char, n: c_int)
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn mvwprintw(_win: *mut WINDOW, _y: c_int, _x: c_int, _fmt: *const c_char, mut _args: ...) -> c_int {
-    // Variadic stub - we can't easily forward va_list to printf without implementing vprintf
-    // For now, just print a placeholder or ignore
-    0
+pub unsafe extern "C" fn mvwprintw(_win: *mut WINDOW, y: c_int, x: c_int, fmt: *const c_char, mut args: ...) -> c_int {
+    let mut buf = [0u8; 1024];
+    let n = crate::stdio::vsnprintf(buf.as_mut_ptr() as *mut c_char, 1024, fmt, args.as_va_list());
+    wmove(_win, y, x);
+    let len = core::cmp::min(n as usize, 1023);
+    let s = core::str::from_utf8_unchecked(&buf[..len]);
+    std::os::print(s);
+    n
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn mvwaddstr(_win: *mut WINDOW, _y: c_int, _x: c_int, s: *const c_char) -> c_int {
-    let cow = core::ffi::CStr::from_ptr(s).to_string_lossy();
-    std::os::print(&cow);
-    0
+pub unsafe extern "C" fn mvwaddstr(_win: *mut WINDOW, y: c_int, x: c_int, s: *const c_char) -> c_int {
+    wmove(_win, y, x);
+    waddstr(_win, s)
 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn waddstr(_win: *mut WINDOW, s: *const c_char) -> c_int {
@@ -236,13 +283,20 @@ pub unsafe extern "C" fn endpwent() {}
 // --- LIBGEN stubs ---
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dirname(path: *mut c_char) -> *mut c_char {
-    // ... (existing dirname)
     let len = crate::string::strlen(path);
-    if len == 0 { return path; }
+    if len == 0 { 
+        *path = b'.' as c_char;
+        *path.add(1) = 0;
+        return path; 
+    }
     let mut i = len - 1;
     while i > 0 {
         if *path.add(i) as u8 == b'/' {
-            *path.add(i) = 0;
+            if i == 0 {
+                *path.add(1) = 0;
+            } else {
+                *path.add(i) = 0;
+            }
             return path;
         }
         i -= 1;
@@ -253,6 +307,23 @@ pub unsafe extern "C" fn dirname(path: *mut c_char) -> *mut c_char {
         *path.add(1) = 0;
     } else {
         *path.add(1) = 0; // Root /
+    }
+    path
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn basename(path: *mut c_char) -> *mut c_char {
+    let len = crate::string::strlen(path);
+    if len == 0 { return path; }
+    let mut i = len - 1;
+    while i > 0 {
+        if *path.add(i) as u8 == b'/' {
+            return path.add(i + 1);
+        }
+        i -= 1;
+    }
+    if *path as u8 == b'/' {
+        return path.add(1);
     }
     path
 }

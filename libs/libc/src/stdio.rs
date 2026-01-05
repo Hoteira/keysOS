@@ -216,7 +216,7 @@ pub unsafe extern "C" fn stat(path: *const c_char, buf: *mut c_void) -> c_int {
         let s = &mut *(buf as *mut Stat);
         core::ptr::write_bytes(buf as *mut u8, 0, core::mem::size_of::<Stat>());
 
-        s.st_mode = if is_dir { 0040000 | 0777 } else { 0100000 | 0666 };
+        s.st_mode = if is_dir { 0o040000 | 0o777 } else { 0o100000 | 0o666 };
         s.st_size = size as u64;
         s.st_blksize = 1024;
         s.st_blocks = (size as u64 + 511) / 512;

@@ -19,6 +19,7 @@ pub const SYS_STAT: u64 = 4;
 pub const SYS_FSTAT: u64 = 5;
 pub const SYS_POLL: u64 = 7;
 pub const SYS_LSEEK: u64 = 8;
+pub const SYS_IOCTL: u64 = 16;
 pub const SYS_PIPE: u64 = 22;
 pub const SYS_NANOSLEEP: u64 = 35;
 pub const SYS_GETPID: u64 = 39;
@@ -122,6 +123,7 @@ pub extern "C" fn syscall_dispatcher(context: &mut CPUState) {
         SYS_FSTAT => fs::handle_file_size(context),
         SYS_POLL => fs::handle_poll(context),
         SYS_LSEEK => fs::handle_seek(context),
+        SYS_IOCTL => fs::handle_ioctl(context),
         SYS_PIPE => fs::handle_pipe(context),
         SYS_NANOSLEEP => process::handle_sleep(context),
         SYS_EXECVE => process::handle_spawn(context),

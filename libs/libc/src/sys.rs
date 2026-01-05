@@ -1,6 +1,15 @@
 use crate::stdlib::malloc;
 use core::ffi::{c_int, c_void};
 
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct winsize {
+    pub ws_row: u16,
+    pub ws_col: u16,
+    pub ws_xpixel: u16,
+    pub ws_ypixel: u16,
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn krake_syscall(n: u64, a1: u64, a2: u64, a3: u64, a4: u64) -> u64 { std::os::syscall4(n, a1, a2, a3, a4) }
 

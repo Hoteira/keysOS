@@ -64,23 +64,27 @@ pub fn spawn_process(path: &str, args: Option<&[&str]>, fd_inheritance: Option<&
 
     match crate::fs::elf::load_elf(&file_buf, pml4_phys, pid) {
         Ok(entry_point) => {
-            let mut new_fd_table = [-1i16; 16];
+            let (new_fd_table, term_size) = {
+                let tm = crate::interrupts::task::TASK_MANAGER.int_lock();
+                let mut fds = [-1i16; 16];
+                let mut size = (80u16, 25u16);
+                if tm.current_task >= 0 {
+                    let task = &tm.tasks[tm.current_task as usize];
+                    fds = task.fd_table;
+                    size = (task.terminal_width, task.terminal_height);
 
-            let tm = crate::interrupts::task::TASK_MANAGER.int_lock();
-            if tm.current_task >= 0 {
-                let current_fds = tm.tasks[tm.current_task as usize].fd_table;
-
-                if let Some(map) = fd_inheritance {
-                    for &(child_fd, parent_fd) in map {
-                        if (parent_fd as usize) < 16 && (child_fd as usize) < 16 {
-                            new_fd_table[child_fd as usize] = current_fds[parent_fd as usize];
+                    if let Some(map) = fd_inheritance {
+                        let mut custom_fds = [-1i16; 16];
+                        for &(child_fd, parent_fd) in map {
+                            if (parent_fd as usize) < 16 && (child_fd as usize) < 16 {
+                                custom_fds[child_fd as usize] = fds[parent_fd as usize];
+                            }
                         }
+                        fds = custom_fds;
                     }
-                } else {
-                    new_fd_table = current_fds;
                 }
-            }
-            drop(tm);
+                (fds, size)
+            };
 
 
             for &g_fd in new_fd_table.iter() {
@@ -92,7 +96,7 @@ pub fn spawn_process(path: &str, args: Option<&[&str]>, fd_inheritance: Option<&
 
             let init_res = {
                 let mut tm = crate::interrupts::task::TASK_MANAGER.int_lock();
-                tm.init_user_task(pid_idx, entry_point, pml4_phys, args, Some(new_fd_table), process_name_bytes)
+                tm.init_user_task(pid_idx, entry_point, pml4_phys, args, Some(new_fd_table), process_name_bytes, term_size)
             };
 
 
