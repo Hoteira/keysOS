@@ -10,30 +10,42 @@ pub mod window;
 pub mod misc;
 
 pub const SYS_READ: u64 = 0;
-pub const SYS_PRINT: u64 = 1;
-pub const SYS_MALLOC: u64 = 5;
-pub const SYS_FREE: u64 = 6;
-pub const SYS_COPY_TO_DB: u64 = 8;
-pub const SYS_ADD_WINDOW: u64 = 22;
-pub const SYS_REMOVE_WINDOW: u64 = 23;
-pub const SYS_GET_WIDTH: u64 = 44;
-pub const SYS_GET_HEIGHT: u64 = 45;
-pub const SYS_UPDATE_WINDOW: u64 = 51;
-pub const SYS_UPDATE_WINDOW_AREA: u64 = 56;
+pub const SYS_WRITE: u64 = 1;
+pub const SYS_OPEN: u64 = 2;
+pub const SYS_CLOSE: u64 = 3;
+pub const SYS_STAT: u64 = 4;
+pub const SYS_FSTAT: u64 = 5;
+pub const SYS_POLL: u64 = 7;
+pub const SYS_LSEEK: u64 = 8;
+pub const SYS_PIPE: u64 = 22;
+pub const SYS_NANOSLEEP: u64 = 35;
+pub const SYS_GETPID: u64 = 39;
+pub const SYS_EXECVE: u64 = 59;
 pub const SYS_EXIT: u64 = 60;
-
-pub const SYS_POLL: u64 = 70;
-pub const SYS_CREATE_FILE: u64 = 71;
-pub const SYS_CREATE_DIR: u64 = 72;
-pub const SYS_REMOVE: u64 = 73;
-pub const SYS_RENAME: u64 = 74;
-pub const SYS_SLEEP: u64 = 76;
-pub const SYS_GET_PROCESS_LIST: u64 = 77;
-pub const SYS_GET_PROCESS_MEM: u64 = 79;
-
+pub const SYS_WAIT4: u64 = 61;
+pub const SYS_KILL: u64 = 62;
+pub const SYS_GETDENTS: u64 = 78;
 pub const SYS_CHDIR: u64 = 80;
+pub const SYS_RENAME: u64 = 82;
 pub const SYS_MKDIR: u64 = 83;
 pub const SYS_RMDIR: u64 = 84;
+pub const SYS_UNLINK: u64 = 87;
+
+// KrakeOS Custom
+pub const SYS_ADD_WINDOW: u64 = 100;
+pub const SYS_REMOVE_WINDOW: u64 = 101;
+pub const SYS_UPDATE_WINDOW: u64 = 102;
+pub const SYS_UPDATE_WINDOW_AREA: u64 = 103;
+pub const SYS_GET_EVENTS: u64 = 104;
+pub const SYS_GET_MOUSE: u64 = 105;
+pub const SYS_GET_SCREEN_WIDTH: u64 = 106;
+pub const SYS_GET_SCREEN_HEIGHT: u64 = 107;
+pub const SYS_GET_TIME: u64 = 108;
+pub const SYS_GET_TICKS: u64 = 109;
+pub const SYS_GET_PROCESS_LIST: u64 = 110;
+pub const SYS_GET_PROCESS_MEM: u64 = 111;
+pub const SYS_MALLOC: u64 = 112;
+pub const SYS_FREE: u64 = 113;
 
 #[unsafe(naked)]
 #[unsafe(no_mangle)]
@@ -96,42 +108,45 @@ pub extern "C" fn syscall_dispatcher(context: &mut CPUState) {
     context.rax = 0;
 
     match syscall_num {
-        SYS_READ => fs::handle_read(context),
-        SYS_PRINT => misc::handle_print(context),
-        SYS_MALLOC => memory::handle_malloc(context),
-        SYS_FREE => memory::handle_free(context),
+        SYS_READ => fs::handle_read_file(context),
+        SYS_WRITE => fs::handle_write_file(context),
+        SYS_OPEN => fs::handle_open(context),
+        SYS_CLOSE => fs::handle_close(context),
+        SYS_STAT => fs::handle_file_size(context),
+        SYS_FSTAT => fs::handle_file_size(context),
+        SYS_POLL => fs::handle_poll(context),
+        SYS_LSEEK => fs::handle_seek(context),
+        SYS_PIPE => fs::handle_pipe(context),
+        SYS_NANOSLEEP => process::handle_sleep(context),
+        SYS_EXECVE => process::handle_spawn(context),
+        SYS_EXIT => process::handle_exit(context),
+        SYS_WAIT4 => process::handle_wait_pid(context),
+        SYS_KILL => process::handle_kill(context),
+        SYS_GETDENTS => fs::handle_read_dir(context),
+        SYS_CHDIR => fs::handle_chdir(context),
+        SYS_RENAME => fs::handle_rename(context),
+        SYS_MKDIR => fs::handle_create(context, 83),
+        SYS_RMDIR => fs::handle_remove(context),
+        SYS_UNLINK => fs::handle_remove(context),
+
         SYS_ADD_WINDOW => window::handle_add_window(context),
         SYS_UPDATE_WINDOW => window::handle_update_window(context),
         SYS_UPDATE_WINDOW_AREA => window::handle_update_window_area(context),
-        52 => window::handle_get_events(context),
-        SYS_GET_WIDTH => window::handle_get_width(context),
-        SYS_GET_HEIGHT => window::handle_get_height(context),
-        61 => fs::handle_open(context),
-        62 => fs::handle_read_file(context),
-        63 => fs::handle_write_file(context),
-        64 => fs::handle_read_dir(context),
-        65 => fs::handle_file_size(context),
-        42 => fs::handle_pipe(context),
-        53 => window::handle_get_mouse(context),
-        54 => misc::handle_time(context),
-        55 => misc::handle_ticks(context),
-        SYS_EXIT => process::handle_exit(context),
-        66 => process::handle_spawn(context),
-        67 => fs::handle_close(context),
-        75 => fs::handle_seek(context),
-        68 => process::handle_wait_pid(context),
-        70 => fs::handle_poll(context),
-        71 => fs::handle_create(context, 71),
-        72 => fs::handle_create(context, 72),
-        73 => fs::handle_remove(context),
-        74 => fs::handle_rename(context),
-        76 => process::handle_sleep(context),
-        77 => process::handle_get_process_list(context),
-        78 => process::handle_kill(context),
-        79 => memory::handle_get_process_mem(context),
-        SYS_CHDIR => fs::handle_chdir(context),
-        SYS_MKDIR => fs::handle_create(context, 72),
-        SYS_RMDIR => fs::handle_remove(context),
+        SYS_GET_EVENTS => window::handle_get_events(context),
+        SYS_GET_SCREEN_WIDTH => window::handle_get_width(context),
+        SYS_GET_SCREEN_HEIGHT => window::handle_get_height(context),
+        SYS_GET_MOUSE => window::handle_get_mouse(context),
+        SYS_GET_TIME => misc::handle_time(context),
+        SYS_GET_TICKS => misc::handle_ticks(context),
+        SYS_GET_PROCESS_LIST => process::handle_get_process_list(context),
+        SYS_GET_PROCESS_MEM => memory::handle_get_process_mem(context),
+        SYS_MALLOC => memory::handle_malloc(context),
+        SYS_FREE => memory::handle_free(context),
+        
+        9 | 10 | 11 | 12 => {
+            context.rax = 0;
+        }
+
         _ => {
             debugln!("[Syscall] Unknown syscall #{}", syscall_num);
             context.rax = u64::MAX;

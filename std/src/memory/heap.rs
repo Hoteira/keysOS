@@ -134,7 +134,7 @@ unsafe fn grow_heap(min_size: usize) -> bool {
             return false;
         }
 
-        let ptr = crate::os::syscall(5, size as u64, 0, 0) as *mut u8;
+        let ptr = crate::os::syscall(112, size as u64, 0, 0) as *mut u8;
         if ptr.is_null() {
             return false;
         }

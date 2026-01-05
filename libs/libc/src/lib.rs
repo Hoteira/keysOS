@@ -36,7 +36,10 @@ pub unsafe extern "C" fn _start() -> ! {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn rust_start(stack: *const usize) -> ! {
-    let size = 128 * 1024 * 1024;
+
+    std::println!("STARTING C PORTED PROGRAM");
+
+    let size = 10 * 1024 * 1024;
     let ptr = std::memory::malloc(size) as *mut u8;
     std::memory::heap::init_heap(ptr, size);
     let argc = *stack as c_int;

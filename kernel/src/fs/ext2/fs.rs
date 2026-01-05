@@ -985,10 +985,86 @@ impl VfsNode for Ext2Node {
             }
             offset += fs.block_size as u64;
         }
-        Err(String::from("File not found"))
-    }
-
-    fn rename(&mut self, old_name: &str, new_name: &str) -> Result<(), String> {
+                    Err(String::from("File not found"))
+                }
+        
+            fn read_dir(&mut self, start_index: u64, buffer: &mut [u8]) -> Result<(usize, usize), String> {
+                let fs = unsafe { &mut *self.fs };
+                let block_size = fs.block_size as usize;
+                
+                let mut bytes_written = 0;
+                let mut count_read = 0;
+                let mut entry_index: u64 = 0;
+                let mut offset = 0;
+                let total_size = self.size();
+                
+                let mut block_buf = alloc::vec![0u8; block_size];
+        
+                while offset < total_size {
+                    let block_idx = (offset / block_size as u64) as u32;
+                    let phys = fs.get_block_address(&self.inode, block_idx);
+                    
+                    if phys != 0 {
+                        fs.read_disk_data(phys as u64 * block_size as u64, &mut block_buf);
+                        
+                        let mut block_pos = 0;
+                        while block_pos < block_size {
+                            let ptr = unsafe { block_buf.as_ptr().add(block_pos) };
+                            let entry = unsafe { &*(ptr as *const DirectoryEntry) };
+                            
+                            if entry.rec_len == 0 { break; }
+                            
+                            if entry.inode != 0 {
+                                if entry_index >= start_index {
+                                    let name_len = entry.name_len as usize;
+                                    
+                                    // Check if entry fits in remaining buffer
+                                    if bytes_written + 2 + name_len > buffer.len() {
+                                        return Ok((bytes_written, count_read));
+                                    }
+                                    
+                                                                let child_inode = fs.read_inode(entry.inode);
+                                    
+                                                                let mapped_type = if (child_inode.mode & 0xF000) == 0x4000 {
+                                    
+                                                                    2 // Directory
+                                    
+                                                                } else if (child_inode.mode & 0xF000) == 0x8000 {
+                                    
+                                                                    1 // File
+                                    
+                                                                } else {
+                                    
+                                                                    0 // Unknown
+                                    
+                                                                };
+                                    
+                                    
+                                    
+                                                                buffer[bytes_written] = mapped_type;
+                                    
+                                    
+                                    buffer[bytes_written + 1] = name_len as u8;
+                                    
+                                    let name_ptr = unsafe { ptr.add(8) };
+                                    unsafe {
+                                        core::ptr::copy_nonoverlapping(name_ptr, buffer.as_mut_ptr().add(bytes_written + 2), name_len);
+                                    }
+                                    
+                                    bytes_written += 2 + name_len;
+                                    count_read += 1;
+                                }
+                                entry_index += 1;
+                            }
+                            block_pos += entry.rec_len as usize;
+                        }
+                    }
+                    offset += block_size as u64;
+                }
+                
+                Ok((bytes_written, count_read))
+            }
+            fn rename(&mut self, old_name: &str, new_name: &str) -> Result<(), String> {
         let _child = self.find(old_name)?;
 
 

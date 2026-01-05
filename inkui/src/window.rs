@@ -197,7 +197,7 @@ impl Window {
     pub fn poll_events(&mut self) -> Vec<Event> {
         let mut events: [Event; 64] = [Event::None; 64];
         unsafe {
-            syscall(52, self.id as u64, events.as_mut_ptr() as u64, 64);
+            syscall(104, self.id as u64, events.as_mut_ptr() as u64, 64);
         }
 
         let mut vec = Vec::new();
@@ -248,7 +248,7 @@ impl Window {
         let mut any_redraw = false;
 
         unsafe {
-            syscall(52, self.id as u64, events.as_mut_ptr() as u64, 64);
+            syscall(104, self.id as u64, events.as_mut_ptr() as u64, 64);
         }
 
         for event in events.iter() {

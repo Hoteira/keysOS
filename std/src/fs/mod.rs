@@ -9,7 +9,7 @@ pub struct File {
 impl File {
     pub fn open(path: &str) -> Result<Self, String> {
         let res = unsafe {
-            syscall(61, path.as_ptr() as u64, path.len() as u64, 0)
+            syscall(2, path.as_ptr() as u64, path.len() as u64, 0)
         };
 
         if res == u64::MAX {
@@ -21,7 +21,7 @@ impl File {
 
     pub fn create(path: &str) -> Result<Self, String> {
         let res = unsafe {
-            syscall(71, path.as_ptr() as u64, path.len() as u64, 0)
+            syscall(85, path.as_ptr() as u64, path.len() as u64, 0)
         };
         if res == 0 {
             File::open(path)
@@ -32,7 +32,7 @@ impl File {
 
     pub fn read(&mut self, buffer: &mut [u8]) -> Result<usize, String> {
         let res = unsafe {
-            syscall(62, self.fd as u64, buffer.as_mut_ptr() as u64, buffer.len() as u64)
+            syscall(0, self.fd as u64, buffer.as_mut_ptr() as u64, buffer.len() as u64)
         };
 
         if res == u64::MAX {
@@ -44,7 +44,7 @@ impl File {
 
     pub fn write(&mut self, buffer: &[u8]) -> Result<usize, String> {
         let res = unsafe {
-            syscall(63, self.fd as u64, buffer.as_ptr() as u64, buffer.len() as u64)
+            syscall(1, self.fd as u64, buffer.as_ptr() as u64, buffer.len() as u64)
         };
 
         if res == u64::MAX {
@@ -56,7 +56,7 @@ impl File {
 
     pub fn size(&self) -> usize {
         unsafe {
-            let res = syscall(65, self.fd as u64, 0, 0);
+            let res = syscall(5, self.fd as u64, 0, 0);
             if res == u64::MAX {
                 0
             } else {
@@ -82,14 +82,14 @@ impl Drop for File {
 
 pub fn create_dir(path: &str) -> Result<(), String> {
     let res = unsafe {
-        syscall(72, path.as_ptr() as u64, path.len() as u64, 0)
+        syscall(83, path.as_ptr() as u64, path.len() as u64, 0)
     };
     if res == 0 { Ok(()) } else { Err(String::from("Failed to create directory")) }
 }
 
 pub fn remove_file(path: &str) -> Result<(), String> {
     let res = unsafe {
-        syscall(73, path.as_ptr() as u64, path.len() as u64, 0)
+        syscall(87, path.as_ptr() as u64, path.len() as u64, 0)
     };
     if res == 0 { Ok(()) } else { Err(String::from("Failed to remove file")) }
 }
@@ -100,14 +100,14 @@ pub fn remove_dir(path: &str) -> Result<(), String> {
 
 pub fn rename(from: &str, to: &str) -> Result<(), String> {
     let res = unsafe {
-        crate::os::syscall4(74, from.as_ptr() as u64, from.len() as u64, to.as_ptr() as u64, to.len() as u64)
+        crate::os::syscall4(82, from.as_ptr() as u64, from.len() as u64, to.as_ptr() as u64, to.len() as u64)
     };
     if res == 0 { Ok(()) } else { Err(String::from("Failed to rename")) }
 }
 
 pub fn mount(disk_id: u8, fs_type: &str) -> Result<(), String> {
     let res = unsafe {
-        syscall(63, disk_id as u64, fs_type.as_ptr() as u64, fs_type.len() as u64)
+        syscall(165, disk_id as u64, fs_type.as_ptr() as u64, fs_type.len() as u64)
     };
 
     if res == 0 {
@@ -139,7 +139,7 @@ pub fn read_dir(path: &str) -> Result<Vec<DirEntry>, String> {
 
     loop {
         let res = unsafe {
-            syscall(64, file.fd as u64, buffer.as_mut_ptr() as u64, buffer.len() as u64)
+            syscall(78, file.fd as u64, buffer.as_mut_ptr() as u64, buffer.len() as u64)
         };
 
         if res == u64::MAX {

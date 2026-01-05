@@ -65,14 +65,14 @@ pub unsafe fn syscall5(num: u64, arg1: u64, arg2: u64, arg3: u64, arg4: u64, arg
 
 pub fn print(s: &str) {
     unsafe {
-        syscall(1, s.as_ptr() as u64, s.len() as u64, 0);
+        syscall(1, 1, s.as_ptr() as u64, s.len() as u64);
     }
 }
 
 pub fn sleep(ms: u64) {
     if ms > 10 {
         unsafe {
-            syscall(76, ms, 0, 0);
+            syscall(35, ms, 0, 0);
         }
 
         yield_task();
@@ -88,37 +88,37 @@ pub fn yield_task() {
 
 pub fn read(buffer: &mut [u8]) -> usize {
     unsafe {
-        syscall(0, buffer.as_mut_ptr() as u64, buffer.len() as u64, 0) as usize
+        syscall(0, 0, buffer.as_mut_ptr() as u64, buffer.len() as u64) as usize
     }
 }
 
 pub fn file_read(fd: usize, buffer: &mut [u8]) -> usize {
     unsafe {
-        syscall(62, fd as u64, buffer.as_mut_ptr() as u64, buffer.len() as u64) as usize
+        syscall(0, fd as u64, buffer.as_mut_ptr() as u64, buffer.len() as u64) as usize
     }
 }
 
 pub fn file_write(fd: usize, buffer: &[u8]) -> usize {
     unsafe {
-        syscall(63, fd as u64, buffer.as_ptr() as u64, buffer.len() as u64) as usize
+        syscall(1, fd as u64, buffer.as_ptr() as u64, buffer.len() as u64) as usize
     }
 }
 
 pub fn file_seek(fd: usize, offset: i64, whence: usize) -> u64 {
     unsafe {
-        syscall(75, fd as u64, offset as u64, whence as u64)
+        syscall(8, fd as u64, offset as u64, whence as u64)
     }
 }
 
 pub fn pipe(fds: &mut [i32; 2]) -> i32 {
     unsafe {
-        syscall(42, fds.as_mut_ptr() as u64, 0, 0) as i32
+        syscall(22, fds.as_mut_ptr() as u64, 0, 0) as i32
     }
 }
 
 pub fn file_close(fd: usize) -> i32 {
     unsafe {
-        syscall(67, fd as u64, 0, 0) as i32
+        syscall(3, fd as u64, 0, 0) as i32
     }
 }
 
@@ -132,26 +132,26 @@ pub fn exit(code: u64) -> ! {
 
 pub fn exec(path: &str) {
     unsafe {
-        syscall(66, path.as_ptr() as u64, path.len() as u64, 0);
+        syscall(59, path.as_ptr() as u64, path.len() as u64, 0);
     }
 }
 
 pub fn spawn(path: &str) -> usize {
     unsafe {
-        syscall(66, path.as_ptr() as u64, path.len() as u64, 0) as usize
+        syscall(59, path.as_ptr() as u64, path.len() as u64, 0) as usize
     }
 }
 
 pub fn spawn_with_fds(path: &str, fds: &[(u8, u8)]) -> usize {
     unsafe {
-        syscall4(66, path.as_ptr() as u64, path.len() as u64, fds.as_ptr() as u64, fds.len() as u64) as usize
+        syscall4(59, path.as_ptr() as u64, path.len() as u64, fds.as_ptr() as u64, fds.len() as u64) as usize
     }
 }
 
 pub fn waitpid(pid: usize) -> usize {
     unsafe {
         loop {
-            let status = syscall(68, pid as u64, 0, 0);
+            let status = syscall(61, pid as u64, 0, 0);
             if status != u64::MAX {
                 return status as usize;
             }
@@ -173,12 +173,12 @@ pub const POLLOUT: i16 = 0x004;
 
 pub fn poll(fds: &mut [PollFd], timeout: i32) -> i32 {
     unsafe {
-        syscall(70, fds.as_mut_ptr() as u64, fds.len() as u64, timeout as u64) as i32
+        syscall(7, fds.as_mut_ptr() as u64, fds.len() as u64, timeout as u64) as i32
     }
 }
 
 pub fn get_time() -> (u8, u8, u8) {
-    let res = unsafe { syscall(54, 0, 0, 0) };
+    let res = unsafe { syscall(108, 0, 0, 0) };
     let h = ((res >> 16) & 0xFF) as u8;
     let m = ((res >> 8) & 0xFF) as u8;
     let s = (res & 0xFF) as u8;
@@ -186,7 +186,7 @@ pub fn get_time() -> (u8, u8, u8) {
 }
 
 pub fn get_system_ticks() -> u64 {
-    unsafe { syscall(55, 0, 0, 0) }
+    unsafe { syscall(109, 0, 0, 0) }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -205,7 +205,7 @@ pub fn get_process_list() -> alloc::vec::Vec<ProcessInfo> {
     processes.resize(max_count, ProcessInfo { pid: 0, state: 0, name: [0; 32] });
 
     let count = unsafe {
-        syscall(77, processes.as_mut_ptr() as u64, max_count as u64, 0) as usize
+        syscall(110, processes.as_mut_ptr() as u64, max_count as u64, 0) as usize
     };
 
     // Truncate to actual count returned by kernel
@@ -216,5 +216,5 @@ pub fn get_process_list() -> alloc::vec::Vec<ProcessInfo> {
 }
 
 pub fn get_process_memory(pid: u64) -> usize {
-    unsafe { syscall(79, pid, 0, 0) as usize }
+    unsafe { syscall(111, pid, 0, 0) as usize }
 }

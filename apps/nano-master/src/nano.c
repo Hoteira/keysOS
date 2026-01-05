@@ -1729,7 +1729,9 @@ void process_a_keystroke(void)
 
 int main(int argc, char **argv)
 {
+    printf("Nano text editor version 0.Krake.0\n");
 	int stdin_flags, optchr;
+
 #ifdef ENABLE_NANORC
 	bool ignore_rcfiles = FALSE;
 		/* Whether to ignore the nanorc files. */

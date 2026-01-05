@@ -851,8 +851,10 @@ impl DisplayServer {
     pub fn present_rect(&self, x: i32, y: i32, w: u32, h: u32) {
         let sx = x.max(0) as u32;
         let sy = y.max(0) as u32;
-        let sw = w.min(self.width as u32 - sx);
-        let sh = h.min(self.height as u32 - sy);
+        let sw = w.min((self.width as u32).saturating_sub(sx));
+        let sh = h.min((self.height as u32).saturating_sub(sy));
+
+        if sw == 0 || sh == 0 { return; }
 
         unsafe {
             if VIRTIO_ACTIVE {

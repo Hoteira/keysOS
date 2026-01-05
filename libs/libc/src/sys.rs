@@ -10,13 +10,13 @@ pub unsafe extern "C" fn krake_sleep(ms: usize) {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn krake_get_time_ms() -> usize { std::os::syscall(55, 0, 0, 0) as usize }
+pub unsafe extern "C" fn krake_get_time_ms() -> usize { std::os::syscall(109, 0, 0, 0) as usize }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn krake_get_event(wid: usize, out_event: *mut u32) -> c_int {
     let mut buf = [0u64; 8];
 
-    if krake_syscall(52, wid as u64, buf.as_mut_ptr() as u64, 1, 0) == 1 {
+    if krake_syscall(104, wid as u64, buf.as_mut_ptr() as u64, 1, 0) == 1 {
         let tag = buf[0] as u32;
         *out_event.add(0) = tag;
 
@@ -114,7 +114,7 @@ pub unsafe extern "C" fn krake_window_create(width: usize, height: usize, _trans
         event_handler: 1,
         w_type: 3,
     };
-    krake_syscall(22, &w as *const _ as u64, 0, 0, 0) as usize
+    krake_syscall(100, &w as *const _ as u64, 0, 0, 0) as usize
 }
 
 #[unsafe(no_mangle)]
@@ -140,17 +140,15 @@ pub unsafe extern "C" fn krake_window_draw(wid: usize) {
         event_handler: 0,
         w_type: 3,
     };
-    krake_syscall(51, &w as *const _ as u64, 0, 0, 0);
+    krake_syscall(102, &w as *const _ as u64, 0, 0, 0);
 }
 
 // --- SIGNAL STUBS ---
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn kill(pid: c_int, sig: c_int) -> c_int {
-    // Syscall 78 is kill(pid) in kernel, but here we have sig.
-    // If sig == 0, it's a check. If sig == 9 (SIGKILL), we call syscall 78.
-    // For now, only support SIGKILL or ignore.
+    // Syscall 62 is kill(pid, sig) in kernel
     if sig == 9 {
-        krake_syscall(78, pid as u64, 0, 0, 0) as c_int
+        krake_syscall(62, pid as u64, 9, 0, 0) as c_int
     } else {
         0
     }

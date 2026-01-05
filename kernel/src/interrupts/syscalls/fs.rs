@@ -4,7 +4,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::{PollFd, POLLERR, POLLIN, POLLNVAL, POLLOUT};
-use super::SYS_CREATE_FILE;
+use super::SYS_MKDIR;
 
 pub fn resolve_path(cwd: &str, path: &str) -> String {
     if path.starts_with('@') {
@@ -29,8 +29,9 @@ pub fn resolve_path(cwd: &str, path: &str) -> String {
 }
 
 pub fn handle_read(context: &mut CPUState) {
-    let user_ptr = context.rdi as *mut u8;
-    let user_len = context.rsi as usize;
+    let _fd = context.rdi;
+    let user_ptr = context.rsi as *mut u8;
+    let user_len = context.rdx as usize;
     let mut bytes_written_to_user = 0;
 
     if user_ptr.is_null() {
@@ -123,7 +124,8 @@ pub fn handle_poll(context: &mut CPUState) {
 pub fn handle_chdir(context: &mut CPUState) {
     let ptr = context.rdi as *const u8;
     let len = context.rsi as usize;
-
+    crate::debugln!("[SYS_CHDIR] ptr: {:p}, len: {}", ptr, len);
+    
     let path_str_full = if ptr.is_null() || len == 0 {
         String::from("")
     } else {
@@ -154,7 +156,7 @@ pub fn handle_chdir(context: &mut CPUState) {
     let disk_id = if disk_part.starts_with("0x") || disk_part.starts_with("0X") {
         u8::from_str_radix(&disk_part[2..], 16).unwrap_or(0xFF)
     } else {
-        disk_part.parse::<u8>().unwrap_or(0xFF)
+        disk_part.parse::<u8>().unwrap_or_else(|_| u8::from_str_radix(disk_part, 16).unwrap_or(0xFF))
     };
 
     let actual_path = if path_parts.len() > 1 { path_parts[1..].join("/") } else { String::from("") };
@@ -190,6 +192,7 @@ pub fn handle_chdir(context: &mut CPUState) {
 pub fn handle_create(context: &mut CPUState, syscall_num: u64) {
     let ptr = context.rdi as *const u8;
     let len = context.rsi as usize;
+    crate::debugln!("[SYS_CREATE] ptr: {:p}, len: {}, type: {}", ptr, len, syscall_num);
     let s = unsafe { core::slice::from_raw_parts(ptr, len) };
     let path_str_full = String::from_utf8_lossy(s);
 
@@ -216,7 +219,7 @@ pub fn handle_create(context: &mut CPUState, syscall_num: u64) {
     let disk_id = if disk_part.starts_with("0x") || disk_part.starts_with("0X") {
         u8::from_str_radix(&disk_part[2..], 16).unwrap_or(0xFF)
     } else {
-        disk_part.parse::<u8>().unwrap_or(0xFF)
+        disk_part.parse::<u8>().unwrap_or_else(|_| u8::from_str_radix(disk_part, 16).unwrap_or(0xFF))
     };
 
     if disk_id == 0xFF {
@@ -231,10 +234,10 @@ pub fn handle_create(context: &mut CPUState, syscall_num: u64) {
         let new_name = &actual_path[last_slash + 1..];
 
         if let Ok(mut parent) = crate::fs::vfs::open(disk_id, parent_path) {
-            let res = if syscall_num == SYS_CREATE_FILE {
-                parent.create_file(new_name)
-            } else {
+            let res = if syscall_num == 83 {
                 parent.create_dir(new_name)
+            } else {
+                parent.create_file(new_name)
             };
 
             match res {
@@ -246,10 +249,10 @@ pub fn handle_create(context: &mut CPUState, syscall_num: u64) {
         }
     } else {
         if let Ok(mut root) = crate::fs::vfs::open(disk_id, "") {
-            let res = if syscall_num == SYS_CREATE_FILE {
-                root.create_file(&actual_path)
-            } else {
+            let res = if syscall_num == 83 {
                 root.create_dir(&actual_path)
+            } else {
+                root.create_file(&actual_path)
             };
 
             match res {
@@ -265,6 +268,7 @@ pub fn handle_create(context: &mut CPUState, syscall_num: u64) {
 pub fn handle_remove(context: &mut CPUState) {
     let ptr = context.rdi as *const u8;
     let len = context.rsi as usize;
+    crate::debugln!("[SYS_REMOVE] ptr: {:p}, len: {}", ptr, len);
     let s = unsafe { core::slice::from_raw_parts(ptr, len) };
     let path_str_full = String::from_utf8_lossy(s);
 
@@ -291,7 +295,7 @@ pub fn handle_remove(context: &mut CPUState) {
     let disk_id = if disk_part.starts_with("0x") || disk_part.starts_with("0X") {
         u8::from_str_radix(&disk_part[2..], 16).unwrap_or(0xFF)
     } else {
-        disk_part.parse::<u8>().unwrap_or(0xFF)
+        disk_part.parse::<u8>().unwrap_or_else(|_| u8::from_str_radix(disk_part, 16).unwrap_or(0xFF))
     };
 
     let actual_path = if path_parts.len() > 1 { path_parts[1..].join("/") } else { String::from("") };
@@ -321,7 +325,8 @@ pub fn handle_rename(context: &mut CPUState) {
     let old_len = context.rsi as usize;
     let new_ptr = context.rdx as *const u8;
     let new_len = context.r10 as usize;
-
+    crate::debugln!("[SYS_RENAME] old_ptr: {:p}, old_len: {}, new_ptr: {:p}, new_len: {}", old_ptr, old_len, new_ptr, new_len);
+    
     let s_old = unsafe { core::slice::from_raw_parts(old_ptr, old_len) };
     let s_new = unsafe { core::slice::from_raw_parts(new_ptr, new_len) };
     let path_old = String::from_utf8_lossy(s_old);
@@ -347,14 +352,13 @@ pub fn handle_rename(context: &mut CPUState) {
         return;
     }
 
-    let disk_part = &parts_old[0][1..];
-    let disk_id = if disk_part.starts_with("0x") || disk_part.starts_with("0X") {
-        u8::from_str_radix(&disk_part[2..], 16).unwrap_or(0xFF)
-    } else {
-        disk_part.parse::<u8>().unwrap_or(0xFF)
-    };
-
-    let actual_old = if parts_old.len() > 1 { parts_old[1..].join("/") } else { String::from("") };
+         let disk_part = &parts_old[0][1..];
+         let disk_id = if disk_part.starts_with("0x") || disk_part.starts_with("0X") {
+             u8::from_str_radix(&disk_part[2..], 16).unwrap_or(0xFF)
+         } else {
+             disk_part.parse::<u8>().unwrap_or_else(|_| u8::from_str_radix(disk_part, 16).unwrap_or(0xFF))
+         };
+        let actual_old = if parts_old.len() > 1 { parts_old[1..].join("/") } else { String::from("") };
 
     let parts_new: Vec<&str> = resolved_new.split('/').collect();
     let actual_new = if parts_new.len() > 1 { parts_new[1..].join("/") } else { String::from("") };
@@ -390,6 +394,7 @@ pub fn handle_rename(context: &mut CPUState) {
 pub fn handle_open(context: &mut CPUState) {
     let ptr = context.rdi as *const u8;
     let len = context.rsi as usize;
+    crate::debugln!("[SYS_OPEN] ptr: {:p}, len: {}", ptr, len);
     let s = unsafe { core::slice::from_raw_parts(ptr, len) };
     let path_str_full = String::from_utf8_lossy(s);
 
@@ -416,7 +421,7 @@ pub fn handle_open(context: &mut CPUState) {
     let disk_id = if disk_part.starts_with("0x") || disk_part.starts_with("0X") {
         u8::from_str_radix(&disk_part[2..], 16).unwrap_or(0xFF)
     } else {
-        disk_part.parse::<u8>().unwrap_or(0xFF)
+        disk_part.parse::<u8>().unwrap_or_else(|_| u8::from_str_radix(disk_part, 16).unwrap_or(0xFF))
     };
 
     if disk_id == 0xFF {
@@ -459,12 +464,10 @@ pub fn handle_read_file(context: &mut CPUState) {
     let local_fd = context.rdi as usize;
     let buf_ptr = context.rsi as *mut u8;
     let len = context.rdx as usize;
-
-    if buf_ptr.is_null() {
-        context.rax = u64::MAX;
-        return;
+    if local_fd > 2 {
+        crate::debugln!("[SYS_READ_FILE] fd: {}, ptr: {:p}, len: {}", local_fd, buf_ptr, len);
     }
-
+    
     let global_fd_opt = {
         let tm = crate::interrupts::task::TASK_MANAGER.int_lock();
         let current = tm.current_task;
@@ -499,19 +502,23 @@ pub fn handle_read_file(context: &mut CPUState) {
         } else {
             context.rax = u64::MAX;
         }
-    } else {
-        context.rax = u64::MAX;
+        return;
     }
+
+    if local_fd == 0 {
+        handle_read(context);
+        return;
+    }
+
+    context.rax = u64::MAX;
 }
 
 pub fn handle_write_file(context: &mut CPUState) {
     let local_fd = context.rdi as usize;
     let buf_ptr = context.rsi as *const u8;
     let len = context.rdx as usize;
-
-    if buf_ptr.is_null() {
-        context.rax = u64::MAX;
-        return;
+    if local_fd > 2 {
+        crate::debugln!("[SYS_WRITE_FILE] fd: {}, ptr: {:p}, len: {}", local_fd, buf_ptr, len);
     }
 
     let global_fd_opt = {
@@ -548,15 +555,22 @@ pub fn handle_write_file(context: &mut CPUState) {
         } else {
             context.rax = u64::MAX;
         }
-    } else {
-        context.rax = u64::MAX;
+        return;
     }
+
+    if local_fd == 1 || local_fd == 2 {
+        super::misc::handle_print(context);
+        return;
+    }
+
+    context.rax = u64::MAX;
 }
 
 pub fn handle_read_dir(context: &mut CPUState) {
     let local_fd = context.rdi as usize;
     let buf_ptr = context.rsi as *mut u8;
     let len = context.rdx as usize;
+    crate::debugln!("[SYS_READ_DIR] fd: {}, ptr: {:p}, len: {}", local_fd, buf_ptr, len);
 
     if buf_ptr.is_null() {
         context.rax = u64::MAX;
@@ -579,43 +593,11 @@ pub fn handle_read_dir(context: &mut CPUState) {
             use crate::fs::vfs::{FileHandle, FileType};
             match handle {
                 FileHandle::File { node, offset } => {
-                    match node.children() {
-                        Ok(children) => {
-                            let start_idx = *offset as usize;
-                            if start_idx >= children.len() {
-                                context.rax = 0;
-                            } else {
-                                let mut bytes_written = 0;
-                                let mut count = 0;
-                                let buf = unsafe { core::slice::from_raw_parts_mut(buf_ptr, len) };
-
-                                for child in children.iter().skip(start_idx) {
-                                    let name = child.name();
-                                    let name_bytes = name.as_bytes();
-                                    let name_len = name_bytes.len();
-
-                                    if bytes_written + 2 + name_len > len {
-                                        break;
-                                    }
-
-                                    let type_byte = match child.kind() {
-                                        FileType::File => 1,
-                                        FileType::Directory => 2,
-                                        FileType::Device => 3,
-                                        _ => 0,
-                                    };
-
-                                    buf[bytes_written] = type_byte;
-                                    buf[bytes_written + 1] = name_len as u8;
-                                    buf[bytes_written + 2..bytes_written + 2 + name_len].copy_from_slice(name_bytes);
-
-                                    bytes_written += 2 + name_len;
-                                    count += 1;
-                                }
-
-                                *offset += count as u64;
-                                context.rax = bytes_written as u64;
-                            }
+                    let buf = unsafe { core::slice::from_raw_parts_mut(buf_ptr, len) };
+                    match node.read_dir(*offset, buf) {
+                        Ok((bytes_written, count_read)) => {
+                            *offset += count_read as u64;
+                            context.rax = bytes_written as u64;
                         }
                         Err(_) => context.rax = u64::MAX,
                     }

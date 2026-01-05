@@ -24,9 +24,19 @@ fn resolve_path(cwd: &str, path: &str) -> String {
     let mut parts = Vec::new();
 
     if !trimmed_path.starts_with('@') {
-        for part in cwd.split('/') {
-            if !part.is_empty() {
-                parts.push(part);
+        if trimmed_path.starts_with('/') {
+            // Absolute from disk root
+            if let Some(idx) = cwd.find('/') {
+                parts.push(&cwd[..idx]);
+            } else {
+                parts.push(cwd);
+            }
+        } else {
+            // Relative
+            for part in cwd.split('/') {
+                if !part.is_empty() {
+                    parts.push(part);
+                }
             }
         }
     }
@@ -123,6 +133,7 @@ pub extern "C" fn _start() -> ! {
     std::os::file_write(STDOUT_FD, "\nWelcome to KrakeOS Shell \u{E8F0} \n> ".as_bytes());
 
     let mut cwd = String::from("@0xE0");
+    let mut path_env = String::from("@0xE0/sys/bin;@0xE0/apps");
     let mut cmd_buffer = String::new();
 
     loop {
@@ -207,47 +218,59 @@ pub extern "C" fn _start() -> ! {
 
 
                         let is_builtin = match parsed.cmd.as_str() {
-                            "cd" | "ls" | "pwd" | "help" | "clear" | "touch" | "mkdir" | "rm" | "mv" | "cp" | "sleep" | "osfetch" | "echo" | "cat" => true,
+                            "cd" | "ls" | "pwd" | "help" | "clear" | "touch" | "mkdir" | "rm" | "mv" | "cp" | "sleep" | "osfetch" | "echo" | "cat" | "export" => true,
                             _ => false
                         };
 
-                        if is_builtin {
-                            execute_builtin(&parsed.cmd, &parsed.args, &mut cwd, stdin_fd, stdout_fd);
-                        } else {
-                            let mut prog_path = String::new();
-                            let mut found = false;
-
-                            if parsed.cmd.starts_with('@') {
-                                prog_path = parsed.cmd.clone();
-                                found = true;
-                            } else {
-                                let mut p = String::from("@0xE0/sys/bin/");
-                                p.push_str(&parsed.cmd);
-                                if !parsed.cmd.ends_with(".elf") {
-                                    p.push_str(".elf");
-                                }
-
-                                if let Ok(_) = std::fs::File::open(&p) {
-                                    prog_path = p;
-                                    found = true;
-                                }
-
-
-                                if !found {
-                                    let apps_dir = format!("@0xE0/apps/{}", parsed.cmd);
-                                    if let Ok(entries) = std::fs::read_dir(&apps_dir) {
-                                        for entry in entries {
-                                            if entry.file_type == std::fs::FileType::File && entry.name.ends_with(".elf") {
-                                                prog_path = format!("{}/{}", apps_dir, entry.name);
-                                                found = true;
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            if found {
+                                                if is_builtin {
+                                                     execute_builtin(&parsed.cmd, &parsed.args, &mut cwd, &mut path_env, stdin_fd, stdout_fd);
+                                                } else {
+                                                                            let mut prog_path = String::new();
+                                                    let mut found = false;
+                        
+                                                                                if parsed.cmd.starts_with('@') || parsed.cmd.contains('/') {
+                        
+                                                                                    prog_path = resolve_path(&cwd, &parsed.cmd);
+                        
+                                                                                    if let Ok(_) = std::fs::File::open(&prog_path) {
+                        
+                                                                                        found = true;
+                        
+                                                                                    }
+                        
+                                                                                } else {
+                        
+                                                    
+                                                        for path_dir in path_env.split(';') {
+                                                            let mut p = format!("{}/{}", path_dir, parsed.cmd);
+                                                            if !parsed.cmd.ends_with(".elf") {
+                                                                p.push_str(".elf");
+                                                            }
+                                                            
+                                                            if let Ok(_) = std::fs::File::open(&p) {
+                                                                prog_path = p;
+                                                                found = true;
+                                                                break;
+                                                            }
+                                                            
+                                                            if !found && (path_dir.ends_with("/apps") || path_dir == "@0xE0/apps") {
+                                                                let apps_dir = format!("{}/{}", path_dir, parsed.cmd);
+                                                                if let Ok(entries) = std::fs::read_dir(&apps_dir) {
+                                                                    for entry in entries {
+                                                                        if entry.file_type == std::fs::FileType::File && entry.name.ends_with(".elf") {
+                                                                            prog_path = format!("{}/{}", apps_dir, entry.name);
+                                                                            found = true;
+                                                                            break;
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                            if found { break; }
+                                                        }
+                                                    }
+                                                    
+                                                    if found {
+                        
                                 let map = [
                                     (0, stdin_fd as u8),
                                     (1, stdout_fd as u8),
@@ -299,9 +322,16 @@ pub extern "C" fn _start() -> ! {
     }
 }
 
-fn execute_builtin(cmd: &str, args: &[String], cwd: &mut String, in_fd: usize, out_fd: usize) {
+fn execute_builtin(cmd: &str, args: &[String], cwd: &mut String, path_env: &mut String, in_fd: usize, out_fd: usize) {
     if cmd == "help" {
-        std::os::file_write(out_fd, b"Available commands: help, clear, ls, cd, pwd, touch, mkdir, rm, mv, cp, cat, sleep, osfetch, echo\n");
+        std::os::file_write(out_fd, b"Available commands: help, clear, ls, cd, pwd, touch, mkdir, rm, mv, cp, cat, sleep, osfetch, echo, export\n");
+    } else if cmd == "export" {
+        if !args.is_empty() {
+            let arg = &args[0];
+            if arg.starts_with("PATH=") {
+                *path_env = String::from(&arg[5..]);
+            }
+        }
     } else if cmd == "echo" {
         for (i, arg) in args.iter().enumerate() {
             if i > 0 {

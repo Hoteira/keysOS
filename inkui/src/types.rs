@@ -19,6 +19,7 @@ pub enum Align {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
+#[repr(C)]
 pub struct Color {
     pub r: u8,
     pub g: u8,

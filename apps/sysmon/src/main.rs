@@ -118,7 +118,7 @@ impl AppState {
         if self.selected_index < self.processes.len() {
             let pid = self.processes[self.selected_index].pid;
             if pid > 2 {
-                unsafe { std::os::syscall(78, pid, 0, 0) };
+                unsafe { std::os::syscall(62, pid, 9, 0) };
                 self.refresh();
             }
         }

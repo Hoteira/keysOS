@@ -27,7 +27,7 @@ pub fn spawn_process(path: &str, fd_inheritance: Option<&[(u8, u8)]>) -> Result<
     let disk_id = if disk_part.starts_with("0x") || disk_part.starts_with("0X") {
         u8::from_str_radix(&disk_part[2..], 16).unwrap_or(0xFF)
     } else {
-        disk_part.parse::<u8>().unwrap_or(0xFF)
+        disk_part.parse::<u8>().unwrap_or_else(|_| u8::from_str_radix(disk_part, 16).unwrap_or(0xFF))
     };
 
     let actual_path = if path_parts.len() > 1 { path_parts[1..].join("/") } else { String::from("") };
@@ -143,6 +143,7 @@ pub fn handle_spawn(context: &mut CPUState) {
     let path_len = context.rsi as usize;
     let fd_map_ptr = context.rdx as *const (u8, u8);
     let fd_map_len = context.r10 as usize;
+    crate::debugln!("[SYS_SPAWN] path_ptr: {:p}, path_len: {}, fd_map_ptr: {:p}, fd_map_len: {}", path_ptr, path_len, fd_map_ptr, fd_map_len);
 
     if path_ptr.is_null() || path_len == 0 {
         context.rax = u64::MAX;

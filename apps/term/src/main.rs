@@ -194,7 +194,7 @@ pub extern "C" fn _start() -> ! {
         use inkui::Event;
         let mut events: [Event; 16] = [Event::None; 16];
         unsafe {
-            std::os::syscall(52, win.id as u64, events.as_mut_ptr() as u64, 16);
+            std::os::syscall(104, win.id as u64, events.as_mut_ptr() as u64, 16);
         }
 
         for event in events.iter() {

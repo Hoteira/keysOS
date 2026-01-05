@@ -78,9 +78,8 @@ pub fn increment_ref(fd: usize) {
 }
 
 pub fn open(disk_id: u8, path_str: &str) -> Result<Box<dyn VfsNode>, String> {
-    crate::debug::serial_print_str("vfs::open: start\r\n");
-
-
+    crate::debugln!("vfs::open: start path='{}' (len={})", path_str, path_str.len());
+    
     crate::debugln!("vfs::open: disk_id check...");
 
 
@@ -142,15 +141,30 @@ pub trait VfsNode {
     fn name(&self) -> String;
     fn size(&self) -> u64;
     fn kind(&self) -> FileType;
-
     fn read(&mut self, offset: u64, buffer: &mut [u8]) -> Result<usize, String>;
     fn write(&mut self, offset: u64, buffer: &[u8]) -> Result<usize, String>;
-
     fn children(&mut self) -> Result<Vec<Box<dyn VfsNode>>, String>;
     fn find(&mut self, name: &str) -> Result<Box<dyn VfsNode>, String>;
 
-    fn create_file(&mut self, _name: &str) -> Result<Box<dyn VfsNode>, String> { Err(String::from("Not supported")) }
-    fn create_dir(&mut self, _name: &str) -> Result<Box<dyn VfsNode>, String> { Err(String::from("Not supported")) }
-    fn remove(&mut self, _name: &str) -> Result<(), String> { Err(String::from("Not supported")) }
-    fn rename(&mut self, _old_name: &str, _new_name: &str) -> Result<(), String> { Err(String::from("Not supported")) }
+    fn read_dir(&mut self, _start_index: u64, _buffer: &mut [u8]) -> Result<(usize, usize), String> {
+        Err(String::from("Not supported"))
+    }
+
+
+    fn create_file(&mut self, _name: &str) -> Result<Box<dyn VfsNode>, String> {
+        Err(String::from("Not supported"))
+    }
+
+
+    fn create_dir(&mut self, _name: &str) -> Result<Box<dyn VfsNode>, String> {
+        Err(String::from("Not supported"))
+    }
+
+    fn remove(&mut self, _name: &str) -> Result<(), String> {
+        Err(String::from("Not supported"))
+    }
+
+    fn rename(&mut self, _old_name: &str, _new_name: &str) -> Result<(), String> {
+        Err(String::from("Not supported"))
+    }
 }

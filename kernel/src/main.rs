@@ -109,7 +109,7 @@ pub extern "C" fn _start(bootinfo_ptr: *const BootInfo) -> ! {
         let n = node.read(0, buf).unwrap();
 
 
-        let pml4 = memory::vmm::new_user_pml4();
+        let pml4 = unsafe { (*(&raw const crate::boot::BOOT_INFO)).pml4 };
 
 
         let pid_idx = interrupts::task::TASK_MANAGER.lock().reserve_pid().expect("Failed to reserve PID for init");
@@ -197,7 +197,7 @@ fn init_syscall_msrs() {
         let sysret_cs_base = 0x20;
 
 
-        let syscall_cs_base = 0x8;
+        let syscall_cs_base = 0x08;
 
 
         let star_value = ((sysret_cs_base as u64) << 48) | ((syscall_cs_base as u64) << 32);
