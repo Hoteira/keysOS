@@ -1,7 +1,7 @@
+use crate::debug::debug;
+use crate::{BOOT, MAX_BPP, MAX_HEIGHT, MAX_WIDTH, MIN_BPP, MIN_HEIGHT, MIN_WIDTH, VBE_MODE};
 use core::arch::asm;
 use log::debug;
-use crate::{BOOT, MAX_BPP, MAX_HEIGHT, MAX_WIDTH, MIN_BPP, MIN_HEIGHT, MIN_WIDTH, VBE_MODE};
-use crate::debug::debug;
 
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
@@ -150,7 +150,7 @@ pub fn find_vbe_mode() -> u16 {
             && mode_height <= MAX_HEIGHT
             && mode_bpp >= MIN_BPP
             && mode_bpp <= MAX_BPP
-            && (mode_attr & 0x80) != 0  
+            && (mode_attr & 0x80) != 0
             && (mode_width > best_width
             || (mode_width == best_width && mode_height > best_height)
             || (mode_width == best_width && mode_height == best_height && mode_bpp > best_bpp))

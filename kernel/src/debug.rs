@@ -1,5 +1,5 @@
-use core::fmt;
 use crate::drivers::port::{inb, Port};
+use core::fmt;
 #[allow(unused_imports)]
 
 pub const COM1: u16 = 0x3F8;
@@ -16,12 +16,11 @@ impl SerialDebug {
     }
 
     pub fn write_byte(&self, byte: u8) {
-        
         while (inb(COM1 + 5) & 0x20) == 0 {}
         match byte {
             b'\n' => {
                 self.port.outb(b'\r');
-                
+
                 while (inb(COM1 + 5) & 0x20) == 0 {}
                 self.port.outb(b'\n');
             }
@@ -35,7 +34,7 @@ impl SerialDebug {
         for byte in s.bytes() {
             match byte {
                 0x20..=0x7e | b'\n' => self.write_byte(byte),
-                b'\r' => {}, 
+                b'\r' => {}
                 _ => self.write_byte(0xfe),
             }
         }
@@ -47,7 +46,7 @@ impl SerialDebug {
                 0x20..=0x7e | b'\n' => {
                     self.write_byte(byte);
                 }
-                b'\r' => {}, 
+                b'\r' => {}
 
                 _ => {
                     self.write_byte(0xfe);

@@ -6,8 +6,8 @@ const PIPE_SIZE: usize = 4096;
 
 pub struct PipeBuffer {
     buffer: [u8; PIPE_SIZE],
-    head: usize, 
-    tail: usize, 
+    head: usize,
+    tail: usize,
     count: usize,
     closed: bool,
 }
@@ -25,11 +25,11 @@ impl PipeBuffer {
 
     pub fn write(&mut self, data: &[u8]) -> usize {
         if self.closed { return 0; }
-        
+
         let mut written = 0;
         for &byte in data {
             if self.count == PIPE_SIZE {
-                break; 
+                break;
             }
             self.buffer[self.head] = byte;
             self.head = (self.head + 1) % PIPE_SIZE;
@@ -43,7 +43,7 @@ impl PipeBuffer {
         let mut read = 0;
         for byte in data.iter_mut() {
             if self.count == 0 {
-                break; 
+                break;
             }
             *byte = self.buffer[self.tail];
             self.tail = (self.tail + 1) % PIPE_SIZE;
@@ -53,7 +53,6 @@ impl PipeBuffer {
         read
     }
 }
-
 
 
 #[derive(Clone)]

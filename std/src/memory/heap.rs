@@ -1,10 +1,10 @@
+use core::mem::{align_of, size_of};
+use core::ptr::write_bytes;
 use core::{
     alloc::{GlobalAlloc, Layout},
     ptr::NonNull,
     sync::atomic::{AtomicBool, AtomicPtr, Ordering},
 };
-use core::ptr::write_bytes;
-use core::mem::{size_of, align_of};
 
 const MAGIC_USED: u32 = 0xDEAD_BEEF;
 
@@ -127,9 +127,9 @@ unsafe fn grow_heap(min_size: usize) -> bool {
     {
         let mut size = 4096 * 1024; // 4MB increments
         if min_size > size {
-             size = min_size.next_power_of_two();
+            size = min_size.next_power_of_two();
         }
-        
+
         if HEAP_REGION_COUNT >= MAX_HEAP_REGIONS {
             return false;
         }
@@ -138,7 +138,7 @@ unsafe fn grow_heap(min_size: usize) -> bool {
         if ptr.is_null() {
             return false;
         }
-        
+
         // Zero the memory (optional but safe)
         write_bytes(ptr, 0, size);
 
@@ -150,7 +150,7 @@ unsafe fn grow_heap(min_size: usize) -> bool {
 
         let seg = ptr as *mut Free;
         (*seg).size = size - size_of::<Free>();
-        
+
         (*seg).next = ALLOCATOR.first_free.load(Ordering::Relaxed);
         ALLOCATOR.first_free.store(seg, Ordering::Relaxed);
 
@@ -176,7 +176,7 @@ pub fn init(base: *mut u8, size: usize) {
     }
 
     let heap_start_ptr = aligned_base_usize as *mut u8;
-    
+
     unsafe {
         HEAP_REGIONS[0] = HeapRegion { start: aligned_base_usize, end: base_usize + size };
         HEAP_REGION_COUNT = 1;
@@ -334,7 +334,7 @@ unsafe impl GlobalAlloc for Allocator {
                 prev_ptr = cur_ptr;
                 cur_ptr = (*cur_ptr).next;
             }
-            
+
             // Allocation failed, try to grow
             let required = size_of::<Used>() + layout.size();
             if !grow_heap(required) {
@@ -360,7 +360,7 @@ unsafe impl GlobalAlloc for Allocator {
 
         let hdr = get_used_header(ptr);
 
-        if !in_heap_bounds(hdr as *const u8) || (hdr as usize) % align_of::<Used>() != 0  {
+        if !in_heap_bounds(hdr as *const u8) || (hdr as usize) % align_of::<Used>() != 0 {
             self.unlock();
             panic!("dealloc: invalid header location");
         }
@@ -394,7 +394,7 @@ unsafe impl GlobalAlloc for Allocator {
         // If we have separate regions, sorting might be tricky if addresses are not contiguous.
         // But coalescing only happens if adjacent.
         // Let's stick to sorted insertion to maintain existing coalescing logic for blocks within the same region.
-        
+
         while !current.is_null() && current < free_block {
             prev = current;
             current = (*current).next;
@@ -406,7 +406,7 @@ unsafe impl GlobalAlloc for Allocator {
         } else {
             (*prev).next = free_block;
         }
-        
+
         // Try coalescing with next
         if !(*free_block).next.is_null() {
             let next_block = (*free_block).next;
@@ -416,7 +416,7 @@ unsafe impl GlobalAlloc for Allocator {
                 (*free_block).next = (*next_block).next;
             }
         }
-        
+
         // Try coalescing with prev
         if !prev.is_null() {
             let prev_end = (*prev).end();

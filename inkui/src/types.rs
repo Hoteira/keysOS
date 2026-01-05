@@ -51,10 +51,10 @@ impl Color {
 
     pub fn from_u32(color: u32) -> Color {
         Color::rgba(
-            ((color >> 16) & 0xFF) as u8, 
-            ((color >> 8)  & 0xFF) as u8, 
-            (color         & 0xFF) as u8, 
-            ((color >> 24) & 0xFF) as u8, 
+            ((color >> 16) & 0xFF) as u8,
+            ((color >> 8) & 0xFF) as u8,
+            (color & 0xFF) as u8,
+            ((color >> 24) & 0xFF) as u8,
         )
     }
 

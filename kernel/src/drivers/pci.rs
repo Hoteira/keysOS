@@ -1,5 +1,5 @@
-use alloc::vec::Vec;
 use crate::drivers::port::{inl, outl};
+use alloc::vec::Vec;
 
 const PCI_CONFIG_ADDRESS: u32 = 0xCF8;
 const PCI_CONFIG_DATA: u32 = 0xCFC;
@@ -42,11 +42,11 @@ impl PciDevice {
 }
 
 
-pub const CAP_PM: u8 = 0x01;      
-pub const CAP_MSI: u8 = 0x05;     
-pub const CAP_VENDOR: u8 = 0x09;  
-pub const CAP_PCIE: u8 = 0x10;    
-pub const CAP_MSIX: u8 = 0x11;    
+pub const CAP_PM: u8 = 0x01;
+pub const CAP_MSI: u8 = 0x05;
+pub const CAP_VENDOR: u8 = 0x09;
+pub const CAP_PCIE: u8 = 0x10;
+pub const CAP_MSIX: u8 = 0x11;
 
 fn pci_config_address(bus: u8, device: u8, function: u8, offset: u8) -> u32 {
     ((bus as u32) << 16)
@@ -235,13 +235,13 @@ impl PciDevice {
         enable_bit | bus | device | function | register
     }
 
-    
+
     pub fn has_capabilities(&self) -> bool {
         let status = self.read_config_register(0x04) >> 16;
         (status & 0x10) != 0
     }
 
-    
+
     pub fn get_capabilities_pointer(&self) -> Option<u8> {
         if !self.has_capabilities() {
             return None;
@@ -255,7 +255,7 @@ impl PciDevice {
         }
     }
 
-    
+
     pub fn read_capability(&self, offset: u8) -> Option<PciCapability> {
         if offset == 0 {
             return None;
@@ -270,7 +270,7 @@ impl PciDevice {
         })
     }
 
-    
+
     pub fn find_capability(&self, cap_id: u8) -> Option<PciCapability> {
         let mut offset = self.get_capabilities_pointer()?;
 

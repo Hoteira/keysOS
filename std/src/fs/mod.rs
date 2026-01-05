@@ -11,7 +11,7 @@ impl File {
         let res = unsafe {
             syscall(61, path.as_ptr() as u64, path.len() as u64, 0)
         };
-        
+
         if res == u64::MAX {
             Err(String::from("Failed to open file"))
         } else {
@@ -34,7 +34,7 @@ impl File {
         let res = unsafe {
             syscall(62, self.fd as u64, buffer.as_mut_ptr() as u64, buffer.len() as u64)
         };
-        
+
         if res == u64::MAX {
             Err(String::from("Read error"))
         } else {
@@ -46,7 +46,7 @@ impl File {
         let res = unsafe {
             syscall(63, self.fd as u64, buffer.as_ptr() as u64, buffer.len() as u64)
         };
-        
+
         if res == u64::MAX {
             Err(String::from("Write error"))
         } else {
@@ -95,7 +95,7 @@ pub fn remove_file(path: &str) -> Result<(), String> {
 }
 
 pub fn remove_dir(path: &str) -> Result<(), String> {
-    remove_file(path) 
+    remove_file(path)
 }
 
 pub fn rename(from: &str, to: &str) -> Result<(), String> {
@@ -109,7 +109,7 @@ pub fn mount(disk_id: u8, fs_type: &str) -> Result<(), String> {
     let res = unsafe {
         syscall(63, disk_id as u64, fs_type.as_ptr() as u64, fs_type.len() as u64)
     };
-    
+
     if res == 0 {
         Ok(())
     } else {
@@ -132,50 +132,49 @@ pub struct DirEntry {
 }
 
 pub fn read_dir(path: &str) -> Result<Vec<DirEntry>, String> {
-    let file = File::open(path)?; 
-    
+    let file = File::open(path)?;
+
     let mut entries = Vec::new();
-    let mut buffer = [0u8; 1024]; 
-    
+    let mut buffer = [0u8; 1024];
+
     loop {
-        
         let res = unsafe {
             syscall(64, file.fd as u64, buffer.as_mut_ptr() as u64, buffer.len() as u64)
         };
-        
+
         if res == u64::MAX {
             return Err(String::from("read_dir failed"));
         }
-        
+
         let bytes_read = res as usize;
         if bytes_read == 0 {
-            break; 
+            break;
         }
-        
+
         let mut offset = 0;
         while offset < bytes_read {
             if offset + 2 > bytes_read { break; }
-            
+
             let type_byte = buffer[offset];
             let name_len = buffer[offset + 1] as usize;
-            
+
             if offset + 2 + name_len > bytes_read { break; }
-            
-            let name_bytes = &buffer[offset + 2 .. offset + 2 + name_len];
+
+            let name_bytes = &buffer[offset + 2..offset + 2 + name_len];
             let name = String::from_utf8_lossy(name_bytes).into_owned();
-            
+
             let file_type = match type_byte {
                 1 => FileType::File,
                 2 => FileType::Directory,
                 3 => FileType::Device,
                 _ => FileType::Unknown,
             };
-            
+
             entries.push(DirEntry { name, file_type });
-            
+
             offset += 2 + name_len;
         }
     }
-    
+
     Ok(entries)
 }

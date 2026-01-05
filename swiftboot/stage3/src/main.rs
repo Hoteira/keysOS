@@ -9,14 +9,13 @@ mod gdt;
 mod tss;
 mod rsdp;
 
-use core::arch::asm;
 use crate::debug::debug;
+use core::arch::asm;
 
-use core::panic::PanicInfo;
-use core::ptr::addr_of;
 use crate::boot::BootInfo;
 use crate::gdt::GDT;
 use crate::rsdp::get_rsdp;
+use core::panic::PanicInfo;
 
 pub const NEXT_STAGE_RAM: u64 = 0x1_7e00;
 pub const NEXT_STAGE_LBA: u64 = 5120;
@@ -25,7 +24,7 @@ pub const KERNEL_LBA: u64 = 1644;
 
 
 const STACK_ADDRESS: u64 = 0xA00000;
-const BOOT_MODE: u8 = 64; 
+const BOOT_MODE: u8 = 64;
 
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".start")]
@@ -38,13 +37,10 @@ pub extern "C" fn _start() -> ! {
         "mov ds, {0:e}",
         "mov es, {0:e}",
         "mov ss, {0:e}",
-
         "mov esp, {1:e}",
-
         out(reg) _,
         in(reg) STACK_ADDRESS as u32,
         out("ebx") ebx,
-
         options(nostack),
         );
     }
@@ -90,20 +86,19 @@ pub extern "C" fn _start() -> ! {
         }
 
         unsafe {
-
             asm!(
             "mov cr3, {0:e}",
             in(reg) 0x2_0000,
             );
 
-            
+
             asm!(
             "mov eax, cr4",
-            "or eax, 0x620", 
+            "or eax, 0x620",
             "mov cr4, eax",
             );
 
-            
+
             asm!(
             "mov ecx, 0xC0000080",
             "rdmsr",
@@ -111,11 +106,11 @@ pub extern "C" fn _start() -> ! {
             "wrmsr",
             );
 
-            
+
             asm!(
             "mov eax, cr0",
-            "and eax, 0xFFFFFFFB", 
-            "or eax, 0x80000002",  
+            "and eax, 0xFFFFFFFB",
+            "or eax, 0x80000002",
             "mov cr0, eax",
             );
 

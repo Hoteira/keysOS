@@ -1,8 +1,10 @@
-use core::ffi::{c_void, c_char, c_int};
 use core::alloc::Layout;
+use core::ffi::{c_char, c_int, c_void};
 
 #[repr(C)]
-struct Header { size: usize }
+struct Header {
+    size: usize,
+}
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn malloc(size: usize) -> *mut c_void {
@@ -62,33 +64,45 @@ pub unsafe extern "C" fn atof(s: *const c_char) -> f64 {
     let mut dot = false;
     while *p != 0 {
         let c = *p as u8;
-        if c == b'.' { dot = true; }
-        else if c >= b'0' && c <= b'9' {
-            if !dot { res = res * 10.0 + (c - b'0') as f64; }
-            else { div *= 10.0; res += (c - b'0') as f64 / div; }
+        if c == b'.' { dot = true; } else if c >= b'0' && c <= b'9' {
+            if !dot { res = res * 10.0 + (c - b'0') as f64; } else {
+                div *= 10.0;
+                res += (c - b'0') as f64 / div;
+            }
         }
         p = p.add(1);
     }
     res
 }
 
-#[unsafe(no_mangle)] pub unsafe extern "C" fn abs(j: c_int) -> c_int { if j < 0 { -j } else { j } }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn abs(j: c_int) -> c_int { if j < 0 { -j } else { j } }
 
-#[unsafe(no_mangle)] pub unsafe extern "C" fn system(_c: *const c_char) -> c_int { 0 }
-#[unsafe(no_mangle)] pub unsafe extern "C" fn exit(s: c_int) -> ! { std::os::exit(s as u64) }
-#[unsafe(no_mangle)] pub unsafe extern "C" fn getenv(_n: *const c_char) -> *mut c_char { core::ptr::null_mut() }
-#[unsafe(no_mangle)] pub unsafe extern "C" fn putenv(_string: *mut c_char) -> c_int { 0 }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn system(_c: *const c_char) -> c_int { 0 }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn exit(s: c_int) -> ! { std::os::exit(s as u64) }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn getenv(_n: *const c_char) -> *mut c_char { core::ptr::null_mut() }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn putenv(_string: *mut c_char) -> c_int { 0 }
 
-#[unsafe(no_mangle)] pub static mut optarg: *mut c_char = core::ptr::null_mut();
-#[unsafe(no_mangle)] pub static mut optind: c_int = 1;
-#[unsafe(no_mangle)] pub static mut opterr: c_int = 1;
-#[unsafe(no_mangle)] pub static mut optopt: c_int = 0;
+#[unsafe(no_mangle)]
+pub static mut optarg: *mut c_char = core::ptr::null_mut();
+#[unsafe(no_mangle)]
+pub static mut optind: c_int = 1;
+#[unsafe(no_mangle)]
+pub static mut opterr: c_int = 1;
+#[unsafe(no_mangle)]
+pub static mut optopt: c_int = 0;
 
-#[unsafe(no_mangle)] pub unsafe extern "C" fn getopt_long(_argc: c_int, _argv: *mut *mut c_char, _optstring: *const c_char, _longopts: *const c_void, _longindex: *mut c_int) -> c_int {
-    -1 
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn getopt_long(_argc: c_int, _argv: *mut *mut c_char, _optstring: *const c_char, _longopts: *const c_void, _longindex: *mut c_int) -> c_int {
+    -1
 }
 
-#[unsafe(no_mangle)] pub unsafe extern "C" fn mkstemps(_template: *mut c_char, _suffix_len: c_int) -> c_int { -1 }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn mkstemps(_template: *mut c_char, _suffix_len: c_int) -> c_int { -1 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn realpath(path: *const c_char, resolved_path: *mut c_char) -> *mut c_char {
@@ -99,7 +113,7 @@ pub unsafe extern "C" fn realpath(path: *const c_char, resolved_path: *mut c_cha
     } else {
         crate::stdlib::malloc(len + 1) as *mut c_char
     };
-    
+
     if !res.is_null() {
         crate::string::strcpy(res, path);
     }
@@ -128,10 +142,7 @@ pub unsafe extern "C" fn strtol(nptr: *const c_char, endptr: *mut *mut c_char, b
     loop {
         let c = *s as u8;
         let val;
-        if c >= b'0' && c <= b'9' { val = (c - b'0') as i64; }
-        else if c >= b'a' && c <= b'z' { val = (c - b'a' + 10) as i64; }
-        else if c >= b'A' && c <= b'Z' { val = (c - b'A' + 10) as i64; }
-        else { break; }
+        if c >= b'0' && c <= b'9' { val = (c - b'0') as i64; } else if c >= b'a' && c <= b'z' { val = (c - b'a' + 10) as i64; } else if c >= b'A' && c <= b'Z' { val = (c - b'A' + 10) as i64; } else { break; }
 
         if val >= b { break; }
 

@@ -57,7 +57,7 @@ pub struct Inode {
     pub blocks: u32,
     pub flags: u32,
     pub osd1: u32,
-    pub block: [u32; 15], 
+    pub block: [u32; 15],
     pub generation: u32,
     pub file_acl: u32,
     pub dir_acl: u32,

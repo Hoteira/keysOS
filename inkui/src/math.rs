@@ -23,11 +23,11 @@ pub fn sqrt_f64(x: f64) -> f64 {
         return x;
     }
 
-    let mut _prev = 0.0; 
+    let mut _prev = 0.0;
     let mut guess = x;
 
     for _ in 0..10 {
-        _prev = guess; 
+        _prev = guess;
         guess = 0.5 * (guess + x / guess);
 
         if (guess - _prev).abs() < 1e-14 {

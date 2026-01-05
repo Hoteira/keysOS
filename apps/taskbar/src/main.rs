@@ -1,9 +1,9 @@
 #![no_std]
 #![no_main]
 
-use inkui::{Window, Widget, Color, Size, Display, Align};
-use std::fs::File;
 extern crate alloc;
+use inkui::{Color, Display, Size, Widget, Window};
+use std::fs::File;
 use alloc::format;
 
 #[panic_handler]
@@ -49,7 +49,7 @@ pub extern "C" fn _start() -> ! {
             }
         }
     }
-    
+
     let mut root = Widget::frame(1)
         .width(Size::Relative(100))
         .height(Size::Relative(100))
@@ -62,7 +62,7 @@ pub extern "C" fn _start() -> ! {
 
     let l = Widget::label(2, " \u{E8F0}  Guest | ")
         .y(Size::Absolute((unit) as usize))
-        .set_text_color(Color::rgb(255,255,255))
+        .set_text_color(Color::rgb(255, 255, 255))
         .background_color(Color::rgba(0, 0, 0, 0))
         .set_text_size(font_size);
 
@@ -71,7 +71,7 @@ pub extern "C" fn _start() -> ! {
     let clock = Widget::label(3, "00:00")
         .y(Size::Absolute((unit * 2.0) as usize))
         .x(Size::Relative(48))
-        .set_text_color(Color::rgb(250,250,250))
+        .set_text_color(Color::rgb(250, 250, 250))
         .background_color(Color::rgba(0, 0, 0, 0))
         .set_text_size(font_size);
 
@@ -86,7 +86,7 @@ pub extern "C" fn _start() -> ! {
         if m != last_minute {
             last_minute = m;
             let time_str = format!("{:02}:{:02}", h, m);
-            
+
             if let Some(widget) = win.find_widget_by_id_mut(3) {
                 if let Widget::Label { text, .. } = widget {
                     text.text = time_str;

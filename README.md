@@ -27,11 +27,14 @@
 
 ## Overview
 
-KrakeOS is a hobby operating system written in Rust. It includes a custom bootloader, basic multitasking, memory management, hardware drivers, a filesystem, and a graphical window manager. This is a learning project that explores OS development from the ground up.
+KrakeOS is a hobby operating system written in Rust. It includes a custom bootloader, basic multitasking, memory
+management, hardware drivers, a filesystem, and a graphical window manager. This is a learning project that explores OS
+development from the ground up.
 
 ## Features
 
 ### Core Kernel & Architecture
+
 - x86_64 (Long Mode)
 - Custom multi-stage bootloader (Swiftboot)
 - Preemptive multitasking with round-robin scheduling
@@ -40,6 +43,7 @@ KrakeOS is a hobby operating system written in Rust. It includes a custom bootlo
 - Context switching with FPU/SSE state save/restore
 
 ### Memory Management
+
 - 4-level paging (PML4)
 - Virtual memory manager
 - Physical frame allocator
@@ -49,30 +53,36 @@ KrakeOS is a hobby operating system written in Rust. It includes a custom bootlo
 ### Drivers
 
 **Graphics:**
+
 - VirtIO GPU with hardware-accelerated 2D and hardware cursor
 - VBE framebuffer fallback
 
 **Storage:**
+
 - VirtIO Block device
 - ATA/IDE (PIO mode)
 - DMA support (PIIX4 Bus Mastering)
 
 **Input:**
+
 - PS/2 Keyboard with modifier keys
 - PS/2 Mouse with scroll wheel support
 
 **Other:**
+
 - PCI enumeration and configuration
 - PIT for scheduling
 - RTC for timekeeping
 
 ### Filesystem
+
 - Ext2 read/write support
 - Virtual filesystem (VFS) layer
 - Anonymous pipes for IPC
 - ELF loader for 64-bit PIE executables
 
 ### Window Manager
+
 - In-kernel compositing window manager
 - Z-ordering, alpha blending, and transparency
 - SSE-optimized blitting
@@ -80,6 +90,7 @@ KrakeOS is a hobby operating system written in Rust. It includes a custom bootlo
 - Dirty rectangle tracking and double buffering
 
 ### Userland
+
 - Custom Rust standard library and C library (krake_libc)
 - Interactive shell with pipes
 - Terminal emulator with ANSI escape codes
@@ -88,6 +99,7 @@ KrakeOS is a hobby operating system written in Rust. It includes a custom bootlo
 - DOOM (via doomgeneric)
 
 ## Building & Running
+
 ```bash
 # You'll need: Rust nightly, QEMU, and build tools
 
@@ -100,7 +112,9 @@ make run
 
 ## Why?
 
-This is a learning project. The goal is to understand how operating systems work by building one from scratch. It's not meant to be production-ready or particularly practical—just a fun way to learn about kernels, drivers, and low-level programming.
+This is a learning project. The goal is to understand how operating systems work by building one from scratch. It's not
+meant to be production-ready or particularly practical—just a fun way to learn about kernels, drivers, and low-level
+programming.
 
 ## Contributing
 

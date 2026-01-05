@@ -1,6 +1,6 @@
-use core::ptr::{read_volatile, write_volatile};
-use crate::memory::pmm;
 use crate::debugln;
+use crate::memory::pmm;
+use core::ptr::{read_volatile, write_volatile};
 
 
 const VIRTIO_BLK_T_IN: u32 = 0;
@@ -29,27 +29,41 @@ const STATUS_DRIVER_OK: u8 = 4;
 const STATUS_FEATURES_OK: u8 = 8;
 
 
-unsafe fn read_16(addr: *mut u8) -> u16 { unsafe {
-    core::ptr::read_volatile(addr as *mut u16)
-}}
-unsafe fn read_32(addr: *mut u8) -> u32 { unsafe {
-    core::ptr::read_volatile(addr as *mut u32)
-}}
-unsafe fn read_8(addr: *mut u8) -> u8 { unsafe {
-    core::ptr::read_volatile(addr)
-}}
-unsafe fn write_8(addr: *mut u8, val: u8) { unsafe {
-    core::ptr::write_volatile(addr, val);
-}}
-unsafe fn write_16(addr: *mut u8, val: u16) { unsafe {
-    core::ptr::write_volatile(addr as *mut u16, val);
-}}
-unsafe fn write_32(addr: *mut u8, val: u32) { unsafe {
-    core::ptr::write_volatile(addr as *mut u32, val);
-}}
-unsafe fn write_64(addr: *mut u8, val: u64) { unsafe {
-    core::ptr::write_volatile(addr as *mut u64, val);
-}}
+unsafe fn read_16(addr: *mut u8) -> u16 {
+    unsafe {
+        core::ptr::read_volatile(addr as *mut u16)
+    }
+}
+unsafe fn read_32(addr: *mut u8) -> u32 {
+    unsafe {
+        core::ptr::read_volatile(addr as *mut u32)
+    }
+}
+unsafe fn read_8(addr: *mut u8) -> u8 {
+    unsafe {
+        core::ptr::read_volatile(addr)
+    }
+}
+unsafe fn write_8(addr: *mut u8, val: u8) {
+    unsafe {
+        core::ptr::write_volatile(addr, val);
+    }
+}
+unsafe fn write_16(addr: *mut u8, val: u16) {
+    unsafe {
+        core::ptr::write_volatile(addr as *mut u16, val);
+    }
+}
+unsafe fn write_32(addr: *mut u8, val: u32) {
+    unsafe {
+        core::ptr::write_volatile(addr as *mut u32, val);
+    }
+}
+unsafe fn write_64(addr: *mut u8, val: u64) {
+    unsafe {
+        core::ptr::write_volatile(addr as *mut u64, val);
+    }
+}
 
 
 #[repr(C, align(16))]
@@ -106,8 +120,6 @@ struct VirtioBlkReqHeader {
 }
 
 pub fn init() {
-    
-    
     let mut device = crate::drivers::pci::find_device(0x1AF4, 0x1042);
     if device.is_none() {
         device = crate::drivers::pci::find_device(0x1AF4, 0x1001);
@@ -129,18 +141,18 @@ pub fn init() {
 
     let caps = virtio.list_capabilities();
 
-    
+
     let mut common_cfg_ptr: *mut u8 = core::ptr::null_mut();
     let mut notify_base: u64 = 0;
     let mut notify_multiplier: u32 = 0;
 
     for cap in caps {
-        if cap.id != 0x09 { continue; } 
+        if cap.id != 0x09 { continue; }
 
         let cfg_type = virtio.read_u8(cap.offset as u32 + 3);
-        let bar      = virtio.read_u8(cap.offset as u32 + 4);
-        let offset   = virtio.read_u32(cap.offset as u32 + 8);
-        
+        let bar = virtio.read_u8(cap.offset as u32 + 4);
+        let offset = virtio.read_u32(cap.offset as u32 + 8);
+
 
         if cfg_type == VIRTIO_CAP_COMMON {
             if let Some(bar_base) = virtio.get_bar(bar) {
@@ -163,24 +175,23 @@ pub fn init() {
     }
 
     unsafe {
-        
         write_8(common_cfg_ptr.add(OFF_DEVICE_STATUS), 0);
 
-        
+
         let mut status = read_8(common_cfg_ptr.add(OFF_DEVICE_STATUS));
         status |= STATUS_ACKNOWLEDGE;
         write_8(common_cfg_ptr.add(OFF_DEVICE_STATUS), status);
 
-        
+
         status |= STATUS_DRIVER;
         write_8(common_cfg_ptr.add(OFF_DEVICE_STATUS), status);
 
-        
-        write_32(common_cfg_ptr.add(OFF_DEVICE_FEATURE_SELECT), 1); 
+
+        write_32(common_cfg_ptr.add(OFF_DEVICE_FEATURE_SELECT), 1);
         let features_high = read_32(common_cfg_ptr.add(OFF_DEVICE_FEATURE));
 
         let mut driver_features_high = 0;
-        if (features_high & 1) != 0 { 
+        if (features_high & 1) != 0 {
             driver_features_high |= 1;
         }
 
@@ -188,9 +199,9 @@ pub fn init() {
         write_32(common_cfg_ptr.add(OFF_DRIVER_FEATURE), driver_features_high);
 
         write_32(common_cfg_ptr.add(OFF_DRIVER_FEATURE_SELECT), 0);
-        write_32(common_cfg_ptr.add(OFF_DRIVER_FEATURE), 0); 
+        write_32(common_cfg_ptr.add(OFF_DRIVER_FEATURE), 0);
 
-        
+
         status |= STATUS_FEATURES_OK;
         write_8(common_cfg_ptr.add(OFF_DEVICE_STATUS), status);
 
@@ -200,10 +211,10 @@ pub fn init() {
             return;
         }
 
-        
+
         setup_queue(common_cfg_ptr, 0, notify_base, notify_multiplier);
 
-        
+
         status |= STATUS_DRIVER_OK;
         write_8(common_cfg_ptr.add(OFF_DEVICE_STATUS), status);
 
@@ -218,52 +229,52 @@ pub fn is_active() -> bool {
     unsafe { IS_ACTIVE }
 }
 
-unsafe fn setup_queue(common_cfg: *mut u8, index: u16, notify_base: u64, notify_multiplier: u32) { unsafe {
-    write_16(common_cfg.add(OFF_QUEUE_SELECT), index);
+unsafe fn setup_queue(common_cfg: *mut u8, index: u16, notify_base: u64, notify_multiplier: u32) {
+    unsafe {
+        write_16(common_cfg.add(OFF_QUEUE_SELECT), index);
 
-    let max_size = read_16(common_cfg.add(OFF_QUEUE_SIZE));
-    if max_size == 0 { return; }
+        let max_size = read_16(common_cfg.add(OFF_QUEUE_SIZE));
+        if max_size == 0 { return; }
 
-    let size: u16 = 32; 
-    write_16(common_cfg.add(OFF_QUEUE_SIZE), size);
+        let size: u16 = 32;
+        write_16(common_cfg.add(OFF_QUEUE_SIZE), size);
 
-    if let Some(frame) = pmm::allocate_frame(0) {
-        core::ptr::write_bytes(frame as *mut u8, 0, 4096);
+        if let Some(frame) = pmm::allocate_frame(0) {
+            core::ptr::write_bytes(frame as *mut u8, 0, 4096);
 
-        let desc_addr = frame;
-        let avail_addr = desc_addr + 512; 
-        let _used_addr = (avail_addr + 4 + (2 * 32) + 2 + 4095) & !4095; 
-        
-        
-        let used_addr = desc_addr + 2048; 
+            let desc_addr = frame;
+            let avail_addr = desc_addr + 512;
+            let _used_addr = (avail_addr + 4 + (2 * 32) + 2 + 4095) & !4095;
 
-        write_64(common_cfg.add(OFF_QUEUE_DESC), desc_addr);
-        write_64(common_cfg.add(OFF_QUEUE_DRIVER), avail_addr);
-        write_64(common_cfg.add(OFF_QUEUE_DEVICE), used_addr);
 
-        let notify_off = read_16(common_cfg.add(OFF_QUEUE_NOTIFY_OFF));
-        let notify_addr = notify_base + (notify_off as u64 * notify_multiplier as u64);
+            let used_addr = desc_addr + 2048;
 
-        write_16(common_cfg.add(OFF_QUEUE_ENABLE), 1);
+            write_64(common_cfg.add(OFF_QUEUE_DESC), desc_addr);
+            write_64(common_cfg.add(OFF_QUEUE_DRIVER), avail_addr);
+            write_64(common_cfg.add(OFF_QUEUE_DEVICE), used_addr);
 
-        BLK_QUEUE = Some(VirtQueue {
-            desc_phys: desc_addr,
-            avail_phys: avail_addr,
-            used_phys: used_addr,
-            queue_index: index,
-            num: size,
-            free_head: 0,
-            last_used_idx: 0,
-            notify_addr,
-        });
+            let notify_off = read_16(common_cfg.add(OFF_QUEUE_NOTIFY_OFF));
+            let notify_addr = notify_base + (notify_off as u64 * notify_multiplier as u64);
+
+            write_16(common_cfg.add(OFF_QUEUE_ENABLE), 1);
+
+            BLK_QUEUE = Some(VirtQueue {
+                desc_phys: desc_addr,
+                avail_phys: avail_addr,
+                used_phys: used_addr,
+                queue_index: index,
+                num: size,
+                free_head: 0,
+                last_used_idx: 0,
+                notify_addr,
+            });
+        }
     }
-}}
+}
 
 pub fn read(lba: u64, _disk: u8, target: &mut [u8]) {
-    
     let sectors = (target.len() + 511) / 512;
-    
-    
+
 
     let header = VirtioBlkReqHeader {
         type_: VIRTIO_BLK_T_IN,
@@ -273,16 +284,12 @@ pub fn read(lba: u64, _disk: u8, target: &mut [u8]) {
 
     let status: u8 = 255;
 
-    
-    
-    
-    
 
     let req_phys = &header as *const _ as u64;
     let req_len = core::mem::size_of::<VirtioBlkReqHeader>() as u32;
 
-    let buf_phys = target.as_mut_ptr() as u64; 
-    
+    let buf_phys = target.as_mut_ptr() as u64;
+
     let buf_len = (sectors * 512) as u32;
 
     let status_phys = &status as *const _ as u64;
@@ -304,10 +311,6 @@ pub fn write(lba: u64, _disk: u8, buffer: &[u8]) {
 
     let status: u8 = 255;
 
-    
-    
-    
-    
 
     let req_phys = &header as *const _ as u64;
     let req_len = core::mem::size_of::<VirtioBlkReqHeader>() as u32;
@@ -323,76 +326,78 @@ pub fn write(lba: u64, _disk: u8, buffer: &[u8]) {
     }
 }
 
-unsafe fn send_command(out_phys: &[u64], out_lens: &[u32], in_phys: &[u64], in_lens: &[u32]) { unsafe {
-    let int_enabled = crate::interrupts::idt::interrupts();
-    if int_enabled { core::arch::asm!("cli"); }
+unsafe fn send_command(out_phys: &[u64], out_lens: &[u32], in_phys: &[u64], in_lens: &[u32]) {
+    unsafe {
+        let int_enabled = crate::interrupts::idt::interrupts();
+        if int_enabled { core::arch::asm!("cli"); }
 
-    let vq = match (*(&raw mut BLK_QUEUE)).as_mut() {
-        Some(q) => q,
-        None => {
-            if int_enabled { core::arch::asm!("sti"); }
-            return;
-        }
-    };
-
-    let total_descs = out_phys.len() + in_phys.len();
-    let num_usize = vq.num as usize;
-    let mut current_desc_idx = vq.free_head as usize;
-
-    
-    for i in 0..out_phys.len() {
-        let desc = VirtqDesc {
-            addr: out_phys[i],
-            len: out_lens[i],
-            flags: 1, 
-            next: ((current_desc_idx + 1) % num_usize) as u16,
+        let vq = match (*(&raw mut BLK_QUEUE)).as_mut() {
+            Some(q) => q,
+            None => {
+                if int_enabled { core::arch::asm!("sti"); }
+                return;
+            }
         };
-        *(vq.desc_phys as *mut VirtqDesc).add(current_desc_idx) = desc;
-        current_desc_idx = (current_desc_idx + 1) % num_usize;
-    }
 
-    
-    for i in 0..in_phys.len() {
-        let flags = if i == in_phys.len() - 1 { 2 } else { 2 | 1 }; 
-        let desc = VirtqDesc {
-            addr: in_phys[i],
-            len: in_lens[i],
-            flags,
-            next: ((current_desc_idx + 1) % num_usize) as u16,
-        };
-        *(vq.desc_phys as *mut VirtqDesc).add(current_desc_idx) = desc;
-        current_desc_idx = (current_desc_idx + 1) % num_usize;
-    }
+        let total_descs = out_phys.len() + in_phys.len();
+        let num_usize = vq.num as usize;
+        let mut current_desc_idx = vq.free_head as usize;
 
-    
-    let last_idx = (vq.free_head as usize + total_descs - 1) % num_usize;
-    let last_desc_ptr = (vq.desc_phys as *mut VirtqDesc).add(last_idx);
-    (*last_desc_ptr).flags &= !1;
 
-    
-    let avail_ptr = vq.avail_phys as *mut VirtqAvail;
-    let idx = (*avail_ptr).idx;
-    (*avail_ptr).ring[(idx % vq.num) as usize] = vq.free_head;
-
-    core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
-    (*avail_ptr).idx = idx.wrapping_add(1);
-
-    
-    write_volatile(vq.notify_addr as *mut u16, vq.queue_index);
-
-    
-    vq.free_head = ((vq.free_head as usize + total_descs) % num_usize) as u16;
-
-    
-    let used_ptr = vq.used_phys as *mut VirtqUsed;
-    loop {
-        let used_idx = read_volatile(core::ptr::addr_of!((*used_ptr).idx));
-        if used_idx != vq.last_used_idx {
-            vq.last_used_idx = vq.last_used_idx.wrapping_add(1);
-            break;
+        for i in 0..out_phys.len() {
+            let desc = VirtqDesc {
+                addr: out_phys[i],
+                len: out_lens[i],
+                flags: 1,
+                next: ((current_desc_idx + 1) % num_usize) as u16,
+            };
+            *(vq.desc_phys as *mut VirtqDesc).add(current_desc_idx) = desc;
+            current_desc_idx = (current_desc_idx + 1) % num_usize;
         }
-        core::hint::spin_loop();
-    }
 
-    if int_enabled { core::arch::asm!("sti"); }
-}}
+
+        for i in 0..in_phys.len() {
+            let flags = if i == in_phys.len() - 1 { 2 } else { 2 | 1 };
+            let desc = VirtqDesc {
+                addr: in_phys[i],
+                len: in_lens[i],
+                flags,
+                next: ((current_desc_idx + 1) % num_usize) as u16,
+            };
+            *(vq.desc_phys as *mut VirtqDesc).add(current_desc_idx) = desc;
+            current_desc_idx = (current_desc_idx + 1) % num_usize;
+        }
+
+
+        let last_idx = (vq.free_head as usize + total_descs - 1) % num_usize;
+        let last_desc_ptr = (vq.desc_phys as *mut VirtqDesc).add(last_idx);
+        (*last_desc_ptr).flags &= !1;
+
+
+        let avail_ptr = vq.avail_phys as *mut VirtqAvail;
+        let idx = (*avail_ptr).idx;
+        (*avail_ptr).ring[(idx % vq.num) as usize] = vq.free_head;
+
+        core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
+        (*avail_ptr).idx = idx.wrapping_add(1);
+
+
+        write_volatile(vq.notify_addr as *mut u16, vq.queue_index);
+
+
+        vq.free_head = ((vq.free_head as usize + total_descs) % num_usize) as u16;
+
+
+        let used_ptr = vq.used_phys as *mut VirtqUsed;
+        loop {
+            let used_idx = read_volatile(core::ptr::addr_of!((*used_ptr).idx));
+            if used_idx != vq.last_used_idx {
+                vq.last_used_idx = vq.last_used_idx.wrapping_add(1);
+                break;
+            }
+            core::hint::spin_loop();
+        }
+
+        if int_enabled { core::arch::asm!("sti"); }
+    }
+}

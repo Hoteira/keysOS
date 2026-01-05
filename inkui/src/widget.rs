@@ -1,9 +1,9 @@
+use crate::layout::{Display, FlexDirection};
+use crate::math::ceil_f32;
+use crate::types::{Align, Color, Size};
+use crate::window::Window;
 use alloc::string::String;
 use alloc::vec::Vec;
-use crate::layout::{Display, FlexDirection};
-use crate::types::{Align, Color, Size};
-use crate::math::ceil_f32;
-use crate::window::Window;
 use asvgard::load_image;
 
 pub type WidgetId = usize;
@@ -22,7 +22,7 @@ pub struct Text {
 }
 
 impl Text {
-    pub  fn new(text: &str) -> Self {
+    pub fn new(text: &str) -> Self {
         Text {
             text: String::from(text),
             size: 12.0,
@@ -57,7 +57,7 @@ pub struct WidgetGeometry {
     pub border_color: Color,
     pub border_radius: Size,
     pub border_size: Size,
-    
+
     pub scroll_offset_y: usize,
     pub content_height: usize,
 }
@@ -336,16 +336,15 @@ impl Widget {
     pub fn handle_scroll(&mut self, delta: i8) {
         let geo = self.geometry_mut();
         let scroll_step = 20;
-        
-        
-        if delta > 0 { 
+
+
+        if delta > 0 {
             geo.scroll_offset_y = geo.scroll_offset_y.saturating_add((delta.abs() as usize) * scroll_step);
-        } else { 
+        } else {
             geo.scroll_offset_y = geo.scroll_offset_y.saturating_sub((delta.abs() as usize) * scroll_step);
         }
 
-        
-        
+
         let max_scroll = geo.content_height.saturating_sub(geo.height).saturating_add(20);
         if geo.scroll_offset_y > max_scroll {
             geo.scroll_offset_y = max_scroll;
@@ -362,8 +361,8 @@ impl Widget {
 
     pub fn get_text(&self) -> String {
         match self {
-             Widget::TextInput { text, .. } => text.text.clone(),
-             _ => String::new(),
+            Widget::TextInput { text, .. } => text.text.clone(),
+            _ => String::new(),
         }
     }
 
@@ -376,17 +375,17 @@ impl Widget {
     }
 
     pub fn handle_key(&mut self, key: char) {
-         if let Widget::TextInput { text, .. } = self {
-             if key == '\x08' {
-                 if text.text.len() > text.min_len {
-                     text.text.pop();
-                 }
-             } else if key == '\n' || key == '\r' {
-                 text.text.push('\n');
-             } else {
-                 text.text.push(key);
-             }
-         }
+        if let Widget::TextInput { text, .. } = self {
+            if key == '\x08' {
+                if text.text.len() > text.min_len {
+                    text.text.pop();
+                }
+            } else if key == '\n' || key == '\r' {
+                text.text.push('\n');
+            } else {
+                text.text.push(key);
+            }
+        }
     }
 
     pub fn geometry(&self) -> &WidgetGeometry {
@@ -558,9 +557,9 @@ impl Widget {
                 available_x + geometry.margin + crate::math::floor_f32(available_width as f32 * size as f32 / 100.0) as usize
             }
             Size::FromRight(size) => {
-                 let right_edge = parent_x + parent_width - parent_padding - geometry.margin;
-                 right_edge.saturating_sub(size).saturating_sub(geometry.width)
-            },
+                let right_edge = parent_x + parent_width - parent_padding - geometry.margin;
+                right_edge.saturating_sub(size).saturating_sub(geometry.width)
+            }
             Size::FromLeft(size) => available_x + size + geometry.margin,
             _ => available_x + geometry.margin,
         };
@@ -574,7 +573,7 @@ impl Widget {
             Size::FromDown(size) => {
                 let bottom_edge = parent_y + parent_height - parent_padding - geometry.margin;
                 bottom_edge.saturating_sub(size).saturating_sub(geometry.height)
-            },
+            }
             _ => available_y + geometry.margin,
         };
 
@@ -605,7 +604,7 @@ impl Widget {
 
                             child.update_layout(child_parent_x, child_parent_y, cell_width, cell_height, 0, _widget_margin, &Display::None);
                         }
-                    },
+                    }
                     Display::Flex { direction, wrap } => {
                         let content_x = widget_x + widget_padding;
                         let content_y = widget_y + widget_padding;
@@ -619,7 +618,7 @@ impl Widget {
 
                         for child in children.iter_mut() {
                             child.update_layout(content_x, content_y, content_width, content_height, 0, _widget_margin, &Display::None);
-                            
+
                             let child_geo = child.geometry();
                             let child_total_w = child_geo.width + child_geo.margin * 2;
                             let child_total_h = child_geo.height + child_geo.margin * 2;
@@ -640,7 +639,7 @@ impl Widget {
 
                                     current_x += child_total_w;
                                     line_height = line_height.max(child_total_h);
-                                },
+                                }
                                 FlexDirection::Column => {
                                     if *wrap && current_y + child_total_h > content_height && current_y > 0 {
                                         current_y = 0;
@@ -659,19 +658,19 @@ impl Widget {
                                 }
                             }
                         }
-                    },
+                    }
                     Display::None => {
                         let content_x = widget_x + widget_padding;
                         let content_y = widget_y + widget_padding;
                         let content_width = widget_width.saturating_sub(widget_padding * 2);
                         let content_height = widget_height.saturating_sub(widget_padding * 2);
-                        
+
                         for child in children.iter_mut() {
                             child.update_layout(content_x, content_y, content_width, content_height, 0, _widget_margin, &Display::None);
                         }
                     }
                 }
-            },
+            }
             Widget::Image { geometry, source_data, rasterized_buffer, last_raster_size } => {
                 if geometry.width > 0 && geometry.height > 0 {
                     if geometry.width != last_raster_size.0 || geometry.height != last_raster_size.1 {
@@ -682,11 +681,11 @@ impl Widget {
                             Ok(buffer) => {
                                 std::println!("Image: Rasterization successful. Buffer len: {}", buffer.len());
                                 if buffer.len() != geometry.width * geometry.height {
-                                     std::println!("WARNING: Buffer len {} does not match expected {}x{} = {}", buffer.len(), geometry.width, geometry.height, geometry.width * geometry.height);
+                                    std::println!("WARNING: Buffer len {} does not match expected {}x{} = {}", buffer.len(), geometry.width, geometry.height, geometry.width * geometry.height);
                                 }
                                 *rasterized_buffer = buffer;
                                 *last_raster_size = (geometry.width, geometry.height);
-                            },
+                            }
                             Err(e) => {
                                 std::println!("Image: Rasterization FAILED. \n{}", e);
                             }
@@ -701,8 +700,8 @@ impl Widget {
     }
 }
 
-use titanf::TrueTypeFont;
 use crate::LinearGradient;
+use titanf::TrueTypeFont;
 
 impl Widget {
     pub fn draw(&mut self, framebuffer: &mut [u32], buffer_width: usize, font: &mut Option<TrueTypeFont>) {
@@ -714,19 +713,19 @@ impl Widget {
                 if !rasterized_buffer.is_empty() {
                     let img_w = geometry.width;
                     let img_h = geometry.height;
-                    
+
                     for row in 0..img_h {
                         let dest_y = geometry.y + geometry.margin + row;
-                        if dest_y >= framebuffer.len() / buffer_width { 
+                        if dest_y >= framebuffer.len() / buffer_width {
                             std::println!("Image Draw: Clipped at bottom y={}", dest_y);
-                            break; 
+                            break;
                         }
-                        
+
                         let dest_start = dest_y * buffer_width + (geometry.x + geometry.margin);
                         let src_start = row * img_w;
-                        
+
                         let copy_width = img_w.min(buffer_width.saturating_sub(geometry.x + geometry.margin));
-                        
+
                         if dest_start + copy_width <= framebuffer.len() && src_start + copy_width <= rasterized_buffer.len() {
                             for i in 0..copy_width {
                                 let pixel = rasterized_buffer[src_start + i];
@@ -735,7 +734,7 @@ impl Widget {
                         }
                     }
                 }
-            },
+            }
             Widget::Frame { geometry, background, .. } => {
                 crate::graphics::primitives::draw_background_style(
                     framebuffer,
@@ -746,19 +745,22 @@ impl Widget {
                     geometry.height,
                     geometry.border_radius,
                     background,
-                    match geometry.border_size { Size::Absolute(s) => s, _ => 0 },
-                    geometry.border_color
+                    match geometry.border_size {
+                        Size::Absolute(s) => s,
+                        _ => 0
+                    },
+                    geometry.border_color,
                 );
-            },
+            }
             Widget::Button { geometry, background, text, focused, .. } => {
                 let mut display_bg = *background;
                 if *focused {
-                     if let BackgroundStyle::Solid(mut c) = display_bg {
-                         c.r = c.r.saturating_add(40);
-                         c.g = c.g.saturating_add(40);
-                         c.b = c.b.saturating_add(40);
-                         display_bg = BackgroundStyle::Solid(c);
-                     }
+                    if let BackgroundStyle::Solid(mut c) = display_bg {
+                        c.r = c.r.saturating_add(40);
+                        c.g = c.g.saturating_add(40);
+                        c.b = c.b.saturating_add(40);
+                        display_bg = BackgroundStyle::Solid(c);
+                    }
                 }
 
                 crate::graphics::primitives::draw_background_style(
@@ -770,14 +772,17 @@ impl Widget {
                     geometry.height,
                     geometry.border_radius,
                     &display_bg,
-                    match geometry.border_size { Size::Absolute(s) => s, _ => 0 },
-                    geometry.border_color
+                    match geometry.border_size {
+                        Size::Absolute(s) => s,
+                        _ => 0
+                    },
+                    geometry.border_color,
                 );
 
                 if let Some(font) = font {
                     if !text.text.is_empty() {
                         let text_y = geometry.y + geometry.margin + (geometry.height / 2) + (text.size as usize / 3);
-                        
+
                         geometry.content_height = crate::graphics::primitives::draw_text_formatted(
                             framebuffer,
                             buffer_width,
@@ -790,11 +795,11 @@ impl Widget {
                             geometry.width.saturating_sub(geometry.padding * 2),
                             geometry.scroll_offset_y,
                             geometry.height.saturating_sub(geometry.padding * 2),
-                            geometry.y + geometry.margin 
+                            geometry.y + geometry.margin,
                         );
                     }
                 }
-            },
+            }
             Widget::Label { geometry, background, text, .. } => {
                 let should_draw_bg = match background {
                     BackgroundStyle::Solid(c) => c.a > 0,
@@ -811,21 +816,23 @@ impl Widget {
                         geometry.height,
                         geometry.border_radius,
                         background,
-                        match geometry.border_size { Size::Absolute(s) => s, _ => 0 },
-                        geometry.border_color
+                        match geometry.border_size {
+                            Size::Absolute(s) => s,
+                            _ => 0
+                        },
+                        geometry.border_color,
                     );
                 }
 
                 if let Some(font) = font {
                     if !text.text.is_empty() {
-                        
                         let text_y = geometry.y + geometry.margin + geometry.padding + text.size as usize;
-                        
+
                         geometry.content_height = crate::graphics::primitives::draw_text_formatted(
                             framebuffer,
                             buffer_width,
                             geometry.x + geometry.margin + geometry.padding,
-                            text_y, 
+                            text_y,
                             &text.text,
                             font,
                             text.size,
@@ -833,11 +840,11 @@ impl Widget {
                             geometry.width.saturating_sub(geometry.padding * 2),
                             geometry.scroll_offset_y,
                             geometry.height.saturating_sub(geometry.padding * 2),
-                            geometry.y + geometry.margin 
+                            geometry.y + geometry.margin,
                         );
                     }
                 }
-            },
+            }
             Widget::TextInput { geometry, background, text, focused, .. } => {
                 crate::graphics::primitives::draw_background_style(
                     framebuffer,
@@ -848,8 +855,11 @@ impl Widget {
                     geometry.height,
                     geometry.border_radius,
                     background,
-                    match geometry.border_size { Size::Absolute(s) => s, _ => 0 },
-                    geometry.border_color
+                    match geometry.border_size {
+                        Size::Absolute(s) => s,
+                        _ => 0
+                    },
+                    geometry.border_color,
                 );
 
                 if let Some(font) = font {
@@ -860,8 +870,8 @@ impl Widget {
                     } else {
                         text.text.clone()
                     };
-                    
-                    let text_y = geometry.y + geometry.margin + geometry.padding + text.size as usize; 
+
+                    let text_y = geometry.y + geometry.margin + geometry.padding + text.size as usize;
 
                     geometry.content_height = crate::graphics::primitives::draw_text_formatted(
                         framebuffer,
@@ -875,10 +885,10 @@ impl Widget {
                         geometry.width.saturating_sub(geometry.padding * 2),
                         geometry.scroll_offset_y,
                         geometry.height.saturating_sub(geometry.padding * 2),
-                        geometry.y + geometry.margin 
+                        geometry.y + geometry.margin,
                     );
                 }
-            },
+            }
             Widget::Canvas { geometry, framebuffer: widget_buffer, background, .. } => {
                 crate::graphics::primitives::draw_background_style(
                     framebuffer,
@@ -889,8 +899,11 @@ impl Widget {
                     geometry.height,
                     geometry.border_radius,
                     background,
-                    match geometry.border_size { Size::Absolute(s) => s, _ => 0 },
-                    geometry.border_color
+                    match geometry.border_size {
+                        Size::Absolute(s) => s,
+                        _ => 0
+                    },
+                    geometry.border_color,
                 );
 
                 if !widget_buffer.is_empty() {
@@ -905,15 +918,14 @@ impl Widget {
                         }
                     }
                 }
-            },
+            }
         }
     }
 
     pub fn find_widget_at(&self, x: usize, y: usize) -> Option<WidgetId> {
         let geometry = self.geometry();
         if x >= geometry.x && x < geometry.x + geometry.width &&
-           y >= geometry.y && y < geometry.y + geometry.height {
-            
+            y >= geometry.y && y < geometry.y + geometry.height {
             if let Some(children) = self.get_children() {
                 for child in children.iter().rev() {
                     if let Some(child_id) = child.find_widget_at(x, y) {
@@ -940,7 +952,7 @@ impl Widget {
         }
         None
     }
-    
+
     pub fn find_widget_by_id(&self, target_id: WidgetId) -> Option<&Widget> {
         if self.geometry().id == target_id {
             return Some(self);

@@ -16,14 +16,14 @@ pub fn get_time() -> (u8, u8, u8) {
     let mut hour = read_rtc(0x04);
     let register_b = read_rtc(0x0B);
 
-    
+
     if (register_b & 0x04) == 0 {
         second = (second & 0x0F) + ((second / 16) * 10);
         minute = (minute & 0x0F) + ((minute / 16) * 10);
         hour = (hour & 0x0F) + ((hour / 16) * 10) | (hour & 0x80);
     }
-    
-    
+
+
     if (register_b & 0x02) == 0 && (hour & 0x80) != 0 {
         hour = ((hour & 0x7F) + 12) % 24;
     }

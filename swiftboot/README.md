@@ -16,6 +16,7 @@
 <br>
 
 ## Quick Start
+
 ```bash
 # Clone and build
 git clone https://github.com/Hoteira/swiftboot.git
@@ -45,6 +46,7 @@ qemu-system-x86_64 -drive file=build/disk.img,format=raw -m 1G -serial stdio
 - 🦀 **Pure Rust** — Minimal assembly, custom target specs for 16/32/64-bit
 
 ## Architecture
+
 ```
 Stage 1 (0x7c00)  →  Stage 2 (0x7e00)  →  Stage 3 (0xfe00)  →  Stage 3 (0x1_7e00)  →  Kernel (0x10_0000)
   512 bytes            16KB real mode       16KB protected       16KB protected       Your kernel here
@@ -52,6 +54,7 @@ Stage 1 (0x7c00)  →  Stage 2 (0x7e00)  →  Stage 3 (0xfe00)  →  Stage 3 (0x
 ```
 
 **Disk Layout:**
+
 - LBA 0: Stage 1 (MBR)
 - LBA 2048: Stage 2
 - LBA 3072: Stage 3
@@ -59,6 +62,7 @@ Stage 1 (0x7c00)  →  Stage 2 (0x7e00)  →  Stage 3 (0xfe00)  →  Stage 3 (0x
 - LBA 6144: Your Kernel
 
 **Boot Info Passed to Kernel:**
+
 ```rust
 struct BootInfo {
     mmap: MemoryMap,        // E820 memory map
@@ -74,7 +78,8 @@ extern "C" fn _start(bootinfo_ptr: *const BootInfo) { ... }
 
 ## 🏗️ Boot Stage Pipeline
 
-The boot process is divided into four distinct stages, utilizing custom target specifications (`bits16`, `bits32`, `bits64`) to ensure correct code generation.
+The boot process is divided into four distinct stages, utilizing custom target specifications (`bits16`, `bits32`,
+`bits64`) to ensure correct code generation.
 
 <div align="center">
   <img src="icon/graph.svg" alt="Swiftboot Boot Flow Diagram" width="50%" height="auto">
@@ -84,17 +89,20 @@ The boot process is divided into four distinct stages, utilizing custom target s
 ## Custom Build System
 
 The `cargo-compile` tool orchestrates the build:
+
 ```bash
 cargo compile  # Builds all stages, converts to raw binaries, assembles disk.img
 ```
 
 Uses custom target specs:
+
 - `bits16.json` — 16-bit real mode (Stage 1, 2)
 - `bits32.json` — 32-bit protected mode (Stage 3)
 - `bits64.json` — 64-bit long mode (Stage 4)
 
 All stages have constants pointing to the next stage (both in the disk and in the RAM)
-Stage 2 also defines the parameters for the display mode that will be chosen (feel free to customize them to your liking):
+Stage 2 also defines the parameters for the display mode that will be chosen (feel free to customize them to your
+liking):
 
 ```rust
 const MAX_BPP: u8 = 32;
@@ -109,6 +117,7 @@ const MODE: u16 = 0x1; // 0 => VGA, 1 => VBE
 ```
 
 Stage 3 defines the mode to boot into and the stack
+
 ```rust
 const BOOT_MODE: u8 = 64; //32 or 64 bits
 const STACK_ADDRESS: u64 = 0x30_0000;

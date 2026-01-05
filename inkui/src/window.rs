@@ -1,11 +1,11 @@
+use crate::event::Event;
+use crate::layout::Display;
+use crate::widget::{Widget, WidgetId};
+use alloc::string::String;
 use alloc::vec::Vec;
 use core::slice;
-use crate::event::Event;
-use crate::widget::{Widget, WidgetId};
-use crate::layout::Display;
 use std::graphics::{self, Items};
 use std::os::syscall;
-use alloc::string::String;
 
 pub struct FrameBuffer {
     pub address: *mut u32,
@@ -84,9 +84,9 @@ impl Window {
     }
 
     pub fn load_font(&mut self, data: &'static [u8]) {
-         if let Ok(font) = TrueTypeFont::load_font(data) {
-             self.font = Some(font);
-         }
+        if let Ok(font) = TrueTypeFont::load_font(data) {
+            self.font = Some(font);
+        }
     }
 
     pub fn set_transparent(&mut self, transparent: bool) {
@@ -113,7 +113,7 @@ impl Window {
             treat_as_transparent: self.treat_as_transparent,
             min_width: self.min_width,
             min_height: self.min_height,
-            event_handler: 1, 
+            event_handler: 1,
             w_type: self.w_type,
         };
 
@@ -122,7 +122,7 @@ impl Window {
         } else {
             graphics::update_window(&std_window);
         }
-        
+
         self.draw();
         self.update();
     }
@@ -136,12 +136,12 @@ impl Window {
         let buffer = unsafe {
             slice::from_raw_parts_mut(
                 self.buffer.address,
-                buffer_len
+                buffer_len,
             )
         };
-        
+
         buffer.fill(0);
-        
+
         for child in &mut self.children {
             child.update_layout(0, 0, self.width, self.height, 0, 0, &Display::None);
         }
@@ -186,10 +186,10 @@ impl Window {
         self.width = width;
         self.height = height;
         self.can_move = can_move;
-        
+
         let new_size = width * height * 4 + 4;
         self.buffer.resize(new_size);
-        
+
         self.draw();
         self.update();
     }
@@ -199,7 +199,7 @@ impl Window {
         unsafe {
             syscall(52, self.id as u64, events.as_mut_ptr() as u64, 64);
         }
-        
+
         let mut vec = Vec::new();
         for e in events {
             if e == Event::None {
@@ -215,11 +215,11 @@ impl Window {
         for child in &self.children {
             collect_focusable_widgets(child, &mut ids);
         }
-        
+
         if ids.is_empty() { return; }
-        
+
         let current_idx = ids.iter().position(|&id| id == self.focus);
-        
+
         let next_id = match current_idx {
             Some(idx) => ids[(idx + 1) % ids.len()],
             None => ids[0],
@@ -233,7 +233,7 @@ impl Window {
                 }
                 self.draw_widget(old_focus);
             }
-            
+
             self.focus = next_id;
             if let Some(w) = self.find_widget_by_id_mut(self.focus) {
                 w.set_focused(true);
@@ -257,7 +257,7 @@ impl Window {
                     if e.width > 0 && e.height > 0 && self.can_resize {
                         self.resize(e.width, e.height, self.can_move);
                     }
-                },
+                }
                 Event::Mouse(e) => {
                     let target_id = if let Some(widget) = self.find_interactive_widget_at(e.x, e.y) {
                         Some(widget.get_id())
@@ -267,9 +267,9 @@ impl Window {
 
                     if e.scroll != 0 {
                         let scroll_target = if self.focus != 0 {
-                             Some(self.focus)
+                            Some(self.focus)
                         } else {
-                             target_id
+                            target_id
                         };
 
                         if let Some(id) = scroll_target {
@@ -287,7 +287,7 @@ impl Window {
                                     old_w.set_focused(false);
                                 }
                             }
-                            
+
                             self.focus = new_id;
                             if let Some(new_w) = self.find_widget_by_id_mut(self.focus) {
                                 new_w.set_focused(true);
@@ -296,7 +296,7 @@ impl Window {
                         }
                     }
 
-                    if e.buttons[0] { 
+                    if e.buttons[0] {
                         if let Some(id) = target_id {
                             let mut handler_opt = None;
                             if let Some(w) = self.find_widget_by_id(id) {
@@ -309,7 +309,7 @@ impl Window {
                             }
                         }
                     }
-                },
+                }
                 Event::Keyboard(e) => {
                     let char_opt = if e.key < 0x110000 {
                         core::char::from_u32(e.key)
@@ -317,7 +317,7 @@ impl Window {
                         None
                     };
 
-                    if e.key == 9 { 
+                    if e.key == 9 {
                         self.focus_next();
                         continue;
                     }
@@ -328,12 +328,12 @@ impl Window {
                         if let Some(widget) = self.find_widget_by_id_mut(self.focus) {
                             match widget {
                                 Widget::Button { on_click, .. } => {
-                                    if e.pressed && (e.key == 13 || e.key == 32) { 
+                                    if e.pressed && (e.key == 13 || e.key == 32) {
                                         click_handler = *on_click;
                                     }
-                                },
+                                }
                                 Widget::TextInput { on_submit, .. } => {
-                                    if e.pressed && (e.key == 13 || e.key == 10) { 
+                                    if e.pressed && (e.key == 13 || e.key == 10) {
                                         click_handler = *on_submit;
                                     } else if e.pressed {
                                         if let Some(c) = char_opt {
@@ -343,7 +343,7 @@ impl Window {
                                             any_redraw = true;
                                         }
                                     }
-                                },
+                                }
                                 _ => {
                                     if e.pressed {
                                         if let Some(c) = char_opt {
@@ -356,14 +356,14 @@ impl Window {
                                 }
                             }
                         }
-                        
+
                         if let Some(handler) = click_handler {
                             handler(self, self.focus);
                             any_redraw = true;
                         }
                     }
-                },
-                _ => {},
+                }
+                _ => {}
             }
         }
 
@@ -405,10 +405,10 @@ fn collect_focusable_widgets(widget: &Widget, ids: &mut Vec<WidgetId>) {
     match widget {
         Widget::Button { .. } | Widget::TextInput { .. } => {
             ids.push(widget.get_id());
-        },
+        }
         _ => {}
     }
-    
+
     if let Some(children) = widget.get_children() {
         for child in children {
             collect_focusable_widgets(child, ids);
@@ -420,7 +420,7 @@ fn find_interactive_widget_recursive(widget: &Widget, x: usize, y: usize) -> Opt
     let geometry = widget.geometry();
 
     if x < geometry.x || x >= geometry.x + geometry.width ||
-       y < geometry.y || y >= geometry.y + geometry.height {
+        y < geometry.y || y >= geometry.y + geometry.height {
         return None;
     }
 

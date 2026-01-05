@@ -1,14 +1,14 @@
-use alloc::string::String;
 use crate::interrupts::task::CPUState;
+use alloc::string::String;
 
 pub fn handle_print(context: &mut CPUState) {
-    let ptr = context.rdi; 
+    let ptr = context.rdi;
     let len = context.rsi as usize;
 
     let s = unsafe { core::slice::from_raw_parts(ptr as *const u8, len) };
     let str_val = String::from_utf8_lossy(s);
     crate::debug_print!("{}", str_val);
-    
+
     context.rax = len as u64;
 }
 

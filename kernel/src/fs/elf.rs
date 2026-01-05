@@ -1,13 +1,12 @@
+use crate::memory::{paging, pmm};
 #[allow(unused_imports)]
-use elfic::{Elf64, Elf64Phdr, ProgramType, ProgramFlags, Elf64Rela, Elf64Sym};
-use crate::memory::{pmm, paging};
+use elfic::{Elf64, Elf64Phdr, Elf64Rela, Elf64Sym, ProgramFlags, ProgramType};
 
 unsafe fn virt_to_phys(_pml4_phys: u64, virt: u64) -> Option<u64> {
     Some(virt)
 }
 
 pub fn load_elf(data: &[u8], target_pml4_phys: u64, pid: u64) -> Result<u64, alloc::string::String> {
-
     let elf = Elf64::new(data).map_err(|e| alloc::format!("ELF Parse Error: {:?}", e))?;
     let header_e_type = elf.header.e_type;
 
@@ -28,10 +27,10 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64, pid: u64) -> Result<u64, all
         if pages == 0 {
             panic!("ELF LOAD ERROR: ELF segment exceeds 4GB!");
         } else {
-             match pmm::allocate_frames(pages as usize, pid) {
-                 Some(addr) => addr,
-                 None => return Err(alloc::format!("OOM: Failed to allocate {} pages for ELF", pages)),
-             }
+            match pmm::allocate_frames(pages as usize, pid) {
+                Some(addr) => addr,
+                None => return Err(alloc::format!("OOM: Failed to allocate {} pages for ELF", pages)),
+            }
         }
     };
 
@@ -45,9 +44,7 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64, pid: u64) -> Result<u64, all
 
 
         if ProgramType::from(phdr.p_type) == ProgramType::Load {
-
             if phdr.p_memsz == 0 {
-
                 continue;
             }
 
@@ -59,7 +56,6 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64, pid: u64) -> Result<u64, all
             }
 
 
-
             let entry_point = elf.header.e_entry + load_base;
 
             if entry_point >= virt_start && entry_point < virt_end {
@@ -68,11 +64,8 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64, pid: u64) -> Result<u64, all
                     let file_offset = phdr_p_offset + entry_offset_in_segment;
                     unsafe {
                         let _ptr = data.as_ptr().add(file_offset as usize);
-
                     }
-                } else {
-
-                }
+                } else {}
             }
 
             let page_start = virt_start & !(paging::PAGE_SIZE - 1);
@@ -88,7 +81,6 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64, pid: u64) -> Result<u64, all
 
             let file_size = phdr.p_filesz as usize;
             if file_size > 0 {
-
                 let segment_data = &data[phdr.p_offset as usize..(phdr.p_offset as usize + file_size)];
 
                 let mut remaining = file_size;
@@ -105,7 +97,7 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64, pid: u64) -> Result<u64, all
                         core::ptr::copy_nonoverlapping(
                             segment_data.as_ptr().add(src_offset),
                             phys_addr as *mut u8,
-                            to_copy
+                            to_copy,
                         );
                     }
 
@@ -114,16 +106,13 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64, pid: u64) -> Result<u64, all
                     current_virt += to_copy as u64;
                 }
             }
-
         }
     }
 
 
-
-
     let mut dynsym_shdr: Option<&elfic::Elf64Shdr> = None;
     for shdr in elf.section_headers() {
-        if shdr.sh_type == 11 { 
+        if shdr.sh_type == 11 {
             let _shdr_sh_offset = shdr.sh_offset;
 
             dynsym_shdr = Some(shdr);
@@ -133,18 +122,17 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64, pid: u64) -> Result<u64, all
 
     if load_base > 0 {
         for shdr in elf.section_headers() {
-            if shdr.sh_type == 4 { 
+            if shdr.sh_type == 4 {
                 let _shdr_sh_offset_rela = shdr.sh_offset;
 
                 let num_entries = shdr.sh_size / shdr.sh_entsize;
                 let offset = shdr.sh_offset as usize;
 
 
-
                 let relas = unsafe {
                     core::slice::from_raw_parts(
                         data.as_ptr().add(offset) as *const Elf64Rela,
-                        num_entries as usize
+                        num_entries as usize,
                     )
                 };
 
@@ -164,11 +152,11 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64, pid: u64) -> Result<u64, all
                     let mut found_val = false;
 
                     match r_type {
-                        8 => { 
+                        8 => {
                             val = load_base.wrapping_add(rela.r_addend as u64);
                             found_val = true;
                         }
-                        1 | 6 | 7 => { 
+                        1 | 6 | 7 => {
                             if let Some(sym_tab) = dynsym_shdr {
                                 let sym_offset = sym_tab.sh_offset as usize + (r_sym as usize * core::mem::size_of::<Elf64Sym>());
                                 if sym_offset < data.len() {
@@ -177,21 +165,16 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64, pid: u64) -> Result<u64, all
                                     if sym.st_shndx != 0 {
                                         val = sym.st_value + load_base;
                                         let _sym_st_value = sym.st_value;
-                                    } else {
-                                    }
+                                    } else {}
 
                                     if r_type == 1 {
                                         val = val.wrapping_add(rela.r_addend as u64);
                                     }
                                     found_val = true;
                                 }
-                            } else {
-
-                            }
+                            } else {}
                         }
-                        _ => {
-
-                        }
+                        _ => {}
                     }
 
                     if found_val {
@@ -199,15 +182,12 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64, pid: u64) -> Result<u64, all
                             unsafe {
                                 *(phys as *mut u64) = val;
                             }
-                        } else {
-
-                        }
+                        } else {}
                     }
                 }
             }
         }
     }
-
 
 
     let entry_point = elf.header.e_entry + load_base;
@@ -216,9 +196,7 @@ pub fn load_elf(data: &[u8], target_pml4_phys: u64, pid: u64) -> Result<u64, all
     unsafe {
         if let Some(phys) = virt_to_phys(target_pml4_phys, entry_point) {
             let _code_ptr = phys as *const u8;
-        } else {
-
-        }
+        } else {}
     }
 
     Ok(entry_point)

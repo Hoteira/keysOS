@@ -3,13 +3,13 @@ pub mod structs;
 pub mod queue;
 pub mod cursor;
 
+use self::consts::*;
+use self::queue::*;
+use self::structs::*;
+use crate::debugln;
+use crate::drivers::pci::{PciCapability, PciDevice};
 use alloc::vec::Vec;
 use std::memory::mmio::{read_16, read_32, read_8, write_32, write_8};
-use crate::drivers::pci::{PciCapability, PciDevice};
-use crate::debugln;
-use self::consts::*;
-use self::structs::*;
-use self::queue::*;
 pub static mut COMMON_CFG_ADDR: u64 = 0;
 
 
@@ -76,7 +76,7 @@ pub fn init() {
         status |= STATUS_DRIVER;
         write_8(common_cfg_ptr.add(OFF_DEVICE_STATUS), status);
 
-        
+
         write_32(common_cfg_ptr.add(OFF_DEVICE_FEATURE_SELECT), 0);
         let device_features_low = read_32(common_cfg_ptr.add(OFF_DEVICE_FEATURE));
 
@@ -97,7 +97,7 @@ pub fn init() {
         }
 
         let mut driver_features_high = 0;
-        if (device_features_high & (1 << 0)) != 0 { 
+        if (device_features_high & (1 << 0)) != 0 {
             driver_features_high |= 1 << 0;
             debugln!("VirtIO GPU: Negotiated VIRTIO_F_VERSION_1");
         }
@@ -140,9 +140,9 @@ pub fn parse_virtio_caps(pci_device: &PciDevice, caps: &[PciCapability]) -> Vec<
         }
 
         let cfg_type = pci_device.read_u8(cap.offset as u32 + 3);
-        let bar      = pci_device.read_u8(cap.offset as u32 + 4);
-        let offset   = pci_device.read_u32(cap.offset as u32 + 8);
-        let length   = pci_device.read_u32(cap.offset as u32 + 12);
+        let bar = pci_device.read_u8(cap.offset as u32 + 4);
+        let offset = pci_device.read_u32(cap.offset as u32 + 8);
+        let length = pci_device.read_u32(cap.offset as u32 + 12);
 
         virtio_caps.push(VirtioPciCap { cfg_type, bar, offset, length });
     }
@@ -154,12 +154,12 @@ fn check_features(common_cfg: *mut u8) {
     unsafe {
         debugln!("VirtIO GPU: Checking features...");
 
-        
+
         write_32(common_cfg.add(OFF_DEVICE_FEATURE_SELECT), 0);
         let features = read_32(common_cfg.add(OFF_DEVICE_FEATURE));
         let has_virgl = (features & (1 << VIRTIO_GPU_F_VIRGL)) != 0;
 
-        
+
         let num_queues = read_16(common_cfg.add(OFF_NUM_QUEUES));
         let has_cursor = num_queues > 1;
 
@@ -190,7 +190,7 @@ pub fn get_display_info() -> Option<(u32, u32)> {
 
     if resp_info.hdr.type_ == VIRTIO_GPU_RESP_OK_DISPLAY_INFO {
         let pmode = resp_info.pmodes[0];
-        
+
         if pmode.r.width > 0 && pmode.r.height > 0 {
             return Some((pmode.r.width, pmode.r.height));
         }
@@ -226,7 +226,7 @@ pub fn start_gpu(width: u32, height: u32, phys_buf1: u64, phys_buf2: u64) {
 
     debugln!("VirtIO GPU: Display Info Type: {:#x}", resp_info.hdr.type_);
 
-    
+
     let create_resource = |id: u32, phys: u64| {
         let req_create = VirtioGpuResourceCreate2d {
             hdr: VirtioGpuCtrlHeader {
@@ -238,7 +238,7 @@ pub fn start_gpu(width: u32, height: u32, phys_buf1: u64, phys_buf2: u64) {
                 padding: [0; 3],
             },
             resource_id: id,
-            format: 1, 
+            format: 1,
             width,
             height,
         };
@@ -292,11 +292,11 @@ pub fn start_gpu(width: u32, height: u32, phys_buf1: u64, phys_buf2: u64) {
         debugln!("VirtIO GPU: Attach Resource {} Resp: {:#x}", id, resp_attach.type_);
     };
 
-    
+
     create_resource(1, phys_buf1);
     create_resource(2, phys_buf2);
 
-    
+
     let req_scanout = VirtioGpuSetScanout {
         hdr: VirtioGpuCtrlHeader {
             type_: VIRTIO_GPU_CMD_SET_SCANOUT,
@@ -348,7 +348,7 @@ pub fn transfer_and_flush(resource_id: u32, width: u32, height: u32) {
         &[core::mem::size_of_val(&req_transfer) as u32],
         &[&resp_transfer as *const _ as u64],
         &[core::mem::size_of_val(&resp_transfer) as u32],
-        false, 
+        false,
     );
 
     let req_flush = VirtioGpuResourceFlush {
@@ -372,20 +372,23 @@ pub fn transfer_and_flush(resource_id: u32, width: u32, height: u32) {
         &[core::mem::size_of_val(&req_flush) as u32],
         &[&resp_flush as *const _ as u64],
         &[core::mem::size_of_val(&resp_flush) as u32],
-        true, 
+        true,
     );
 }
 
 pub static mut TRANSFER_REQUESTS: [VirtioGpuTransferToHost2d; 128] = [VirtioGpuTransferToHost2d {
     hdr: VirtioGpuCtrlHeader { type_: 0, flags: 0, fence_id: 0, ctx_id: 0, ring_idx: 0, padding: [0; 3] },
     r: VirtioGpuRect { x: 0, y: 0, width: 0, height: 0 },
-    offset: 0, resource_id: 0, padding: 0
+    offset: 0,
+    resource_id: 0,
+    padding: 0,
 }; 128];
 
 pub static mut FLUSH_REQUESTS: [VirtioGpuResourceFlush; 128] = [VirtioGpuResourceFlush {
     hdr: VirtioGpuCtrlHeader { type_: 0, flags: 0, fence_id: 0, ctx_id: 0, ring_idx: 0, padding: [0; 3] },
     r: VirtioGpuRect { x: 0, y: 0, width: 0, height: 0 },
-    resource_id: 0, padding: 0
+    resource_id: 0,
+    padding: 0,
 }; 128];
 
 pub static mut REQ_IDX: usize = 0;
@@ -418,7 +421,7 @@ pub fn flush(x: u32, y: u32, width: u32, height: u32, screen_width: u32, resourc
             &[core::mem::size_of::<VirtioGpuTransferToHost2d>() as u32],
             &[],
             &[],
-            false, 
+            false,
         );
 
         FLUSH_REQUESTS[idx] = VirtioGpuResourceFlush {

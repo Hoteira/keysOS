@@ -71,7 +71,7 @@ impl Gdt {
         let low_desc = (tss_limit & 0xFFFF)
             | ((tss_base & 0xFFFF) << 16)
             | (((tss_base >> 16) & 0xFF) << 32)
-            | (0x89 << 40) 
+            | (0x89 << 40)
             | (((tss_limit >> 16) & 0xF) << 48)
             | (((tss_base >> 24) & 0xFF) << 56);
 

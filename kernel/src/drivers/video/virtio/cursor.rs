@@ -1,14 +1,13 @@
-
 use crate::debugln;
 
 use super::consts::*;
-use super::structs::*;
 use super::queue::send_command_queue;
+use super::structs::*;
 
 pub fn setup_cursor(phys_ptr: u64, width: u32, height: u32, x: u32, y: u32) {
     let cursor_id = 3;
 
-    
+
     let req_create = VirtioGpuResourceCreate2d {
         hdr: VirtioGpuCtrlHeader {
             type_: VIRTIO_GPU_CMD_RESOURCE_CREATE_2D,
@@ -34,7 +33,7 @@ pub fn setup_cursor(phys_ptr: u64, width: u32, height: u32, x: u32, y: u32) {
         true,
     );
 
-    
+
     #[repr(C)]
     struct AttachRequest {
         hdr: VirtioGpuResourceAttachBacking,
@@ -71,7 +70,7 @@ pub fn setup_cursor(phys_ptr: u64, width: u32, height: u32, x: u32, y: u32) {
         true,
     );
 
-    
+
     let req_transfer = VirtioGpuTransferToHost2d {
         hdr: VirtioGpuCtrlHeader {
             type_: VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D,
@@ -97,7 +96,7 @@ pub fn setup_cursor(phys_ptr: u64, width: u32, height: u32, x: u32, y: u32) {
         true,
     );
 
-    
+
     let req_update = VirtioGpuUpdateCursor {
         hdr: VirtioGpuCtrlHeader {
             type_: VIRTIO_GPU_CMD_UPDATE_CURSOR,
@@ -119,12 +118,12 @@ pub fn setup_cursor(phys_ptr: u64, width: u32, height: u32, x: u32, y: u32) {
         padding: 0,
     };
 
-    
+
     send_command_queue(
         1,
         &[&req_update as *const _ as u64],
         &[core::mem::size_of_val(&req_update) as u32],
-        &[], 
+        &[],
         &[],
         true,
     );
@@ -147,18 +146,18 @@ pub fn move_cursor(x: u32, y: u32) {
             y,
             padding: 0,
         },
-        resource_id: 0, 
+        resource_id: 0,
         hot_x: 0,
         hot_y: 0,
         padding: 0,
     };
 
-    
+
     send_command_queue(
         1,
         &[&req_move as *const _ as u64],
         &[core::mem::size_of_val(&req_move) as u32],
-        &[], 
+        &[],
         &[],
         true,
     );

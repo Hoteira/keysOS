@@ -84,9 +84,9 @@ impl Idt {
         self.entries[0].set(crate::interrupts::exceptions::div_error as u64);
         self.entries[5].set(crate::interrupts::exceptions::bounds as u64);
         self.entries[6].set(crate::interrupts::exceptions::invalid_opcode as u64);
-        
+
         self.entries[8].set(crate::interrupts::exceptions::double_fault as u64);
-        self.entries[8].set_ist(1); 
+        self.entries[8].set_ist(1);
 
         self.entries[13].set(crate::interrupts::exceptions::general_protection_fault as u64);
         self.entries[13].set_ist(3);
@@ -110,10 +110,10 @@ pub fn interrupts() -> bool {
 
     unsafe {
         asm!(
-            "pushfq",
-            "pop {}",
-            out(reg) flags,
-            options(nomem, nostack, preserves_flags)
+        "pushfq",
+        "pop {}",
+        out(reg) flags,
+        options(nomem, nostack, preserves_flags)
         );
     }
     (flags & (1 << 9)) != 0

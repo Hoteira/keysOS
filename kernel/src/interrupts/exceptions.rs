@@ -1,5 +1,5 @@
-use crate::drivers::port::{inb, outb};
 use crate::drivers::periferics::keyboard::KEYBOARD_BUFFER;
+use crate::drivers::port::{inb, outb};
 use crate::window_manager::input::MOUSE;
 
 #[derive(Clone, Copy, Debug)]
@@ -31,7 +31,7 @@ fn print_hex(n: u64) {
         return;
     }
 
-    
+
     let mut leading = true;
     for i in (0..16).rev() {
         let shift = i * 4;
@@ -57,17 +57,16 @@ fn kill_current_task() {
 
     if pid_to_kill != -1 {
         crate::interrupts::task::TASK_MANAGER.int_lock().kill_process(pid_to_kill as u64);
-        
+
         unsafe {
-             core::arch::asm!("sti");
-             loop { core::arch::asm!("hlt"); }
+            core::arch::asm!("sti");
+            loop { core::arch::asm!("hlt"); }
         }
     } else {
-        
         serial_println("Kernel Panic: Exception in Kernel Mode with no valid task.");
         unsafe {
-             core::arch::asm!("cli");
-             loop { core::arch::asm!("hlt"); }
+            core::arch::asm!("cli");
+            loop { core::arch::asm!("hlt"); }
         }
     }
 }
@@ -176,7 +175,6 @@ pub extern "x86-interrupt" fn keyboard_handler(_info: &mut StackFrame) {
     if let Some((key, pressed)) = crate::drivers::periferics::keyboard::handle_scancode(scancode) {
         if crate::drivers::periferics::keyboard::is_super_active() {
             if pressed {
-                
                 crate::debugln!("Global Shortcut: Super + {}", key);
 
                 if key == 'p' as u32 {
@@ -216,11 +214,7 @@ pub extern "x86-interrupt" fn keyboard_handler(_info: &mut StackFrame) {
                     }
                 }
             }
-            
         } else {
-            
-
-            
             if pressed {
                 if key == 32 { crate::debugln!("KEY: Space Pressed"); }
                 KEYBOARD_BUFFER.lock().push_back(key);
@@ -228,10 +222,10 @@ pub extern "x86-interrupt" fn keyboard_handler(_info: &mut StackFrame) {
                 if key == 32 { crate::debugln!("KEY: Space Released"); }
             }
 
-            
+
             unsafe {
                 let active_window_id = crate::window_manager::input::CLICKED_WINDOW_ID;
-                let repeat = 1; 
+                let repeat = 1;
                 if active_window_id != 0 {
                     let composer = &*(&raw const crate::window_manager::composer::COMPOSER);
                     let mut found = false;
@@ -245,7 +239,7 @@ pub extern "x86-interrupt" fn keyboard_handler(_info: &mut StackFrame) {
                     }
 
                     if found {
-                        use crate::window_manager::events::{GLOBAL_EVENT_QUEUE, Event, KeyboardEvent};
+                        use crate::window_manager::events::{Event, KeyboardEvent, GLOBAL_EVENT_QUEUE};
 
                         for _ in 0..repeat {
                             let event = Event::Keyboard(KeyboardEvent {
@@ -275,7 +269,7 @@ pub static mut MOUSE_PACKET: [u8; 4] = [0; 4];
 pub static mut MOUSE_IDX: usize = 0;
 
 pub extern "x86-interrupt" fn mouse_handler(_info: &mut StackFrame) {
-    use crate::drivers::periferics::mouse::{MOUSE_PACKET, MOUSE_IDX, MOUSE_PACKET_SIZE};
+    use crate::drivers::periferics::mouse::{MOUSE_IDX, MOUSE_PACKET, MOUSE_PACKET_SIZE};
 
     let data = inb(0x60);
 
@@ -289,7 +283,6 @@ pub extern "x86-interrupt" fn mouse_handler(_info: &mut StackFrame) {
             MOUSE_PACKET[MOUSE_IDX] = data;
             MOUSE_IDX += 1;
         } else {
-            
             MOUSE_IDX = 0;
         }
 

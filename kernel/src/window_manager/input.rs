@@ -1,10 +1,10 @@
-use core::sync::atomic::{AtomicU16, Ordering};
-use crate::debugln;
-use crate::drivers::video::virtio;
-use crate::window_manager::display::{DISPLAY_SERVER, VIRTIO_ACTIVE, Color, State};
 use super::composer::COMPOSER;
 use super::events::{Event, ResizeEvent, GLOBAL_EVENT_QUEUE};
 use super::window::Items;
+use crate::debugln;
+use crate::drivers::video::virtio;
+use crate::window_manager::display::{Color, State, DISPLAY_SERVER, VIRTIO_ACTIVE};
+use core::sync::atomic::{AtomicU16, Ordering};
 
 pub static mut MOUSE: Mouse = Mouse {
     x: 0,
@@ -87,18 +87,17 @@ impl Mouse {
                     let old_id = CLICKED_WINDOW_ID;
                     let new_id = ws.id;
 
-                    
+
                     if old_id != new_id {
                         CLICKED_WINDOW_ID = new_id;
                         (*(&raw mut COMPOSER)).focus_window(new_id);
                     }
                 }
 
-                
+
                 if ws.can_move && is_super {
                     unsafe {
-                        CLICK_STARTED_IN_TITLEBAR = true; 
-                        
+                        CLICK_STARTED_IN_TITLEBAR = true;
                     }
                 } else {
                     unsafe { CLICK_STARTED_IN_TITLEBAR = false; }
@@ -137,7 +136,6 @@ impl Mouse {
                     }
                     W_WIDTH = 0;
                     W_HEIGHT = 0;
-
                 } else if (*(&raw mut DRAGGING_WINDOW)).load(Ordering::Relaxed) != 0 {
                     let wid = (*(&raw mut DRAGGING_WINDOW)).load(Ordering::Relaxed) as usize;
                     let composer = &mut *(&raw mut COMPOSER);
@@ -209,7 +207,7 @@ impl Mouse {
                 w.x as u16,
                 unsafe { W_HEIGHT as u16 },
                 unsafe { W_WIDTH as u16 },
-                Color::rgb(245, 245, 247)
+                Color::rgb(245, 245, 247),
             );
 
             unsafe {
@@ -233,7 +231,6 @@ impl Mouse {
                 }
             }
             return;
-
         } else if unsafe { (*(&raw mut DRAGGING_WINDOW)).load(Ordering::Relaxed) != 0 } {
             let composer = unsafe { &mut *(&raw mut COMPOSER) };
             let display_server = unsafe { &mut *(&raw mut DISPLAY_SERVER) };
@@ -297,24 +294,23 @@ impl Mouse {
 
             display_server.copy_to_fb(old_win_x as i32, old_win_y as i32, width as u32, height as u32);
 
-            
+
             display_server.copy_to_fb_a(width as u32, height as u32, buffer, new_x as i32, new_y as i32, Some(0xFFFFFFFF), w.treat_as_transparent);
 
-            
+
             for i in 0..composer.windows.len() {
                 let w = &composer.windows[i];
                 match w.w_type {
                     Items::Bar | Items::Popup => {
-                        
                         display_server.copy_to_fb_clipped(
                             w.width as u32,
                             w.height as u32,
                             w.buffer,
                             w.x as i32,
                             w.y as i32,
-                            new_x as i32, new_y as i32, width as u32, height as u32, 
+                            new_x as i32, new_y as i32, width as u32, height as u32,
                             None,
-                            w.treat_as_transparent
+                            w.treat_as_transparent,
                         );
                     }
                     _ => {}
@@ -403,8 +399,8 @@ impl Mouse {
                     let local_x = (self.x as isize - w.x).max(0) as usize;
                     let local_y = (self.y as isize - w.y).max(0) as usize;
 
-                    use crate::window_manager::events::{GLOBAL_EVENT_QUEUE, Event, MouseEvent};
-                    
+                    use crate::window_manager::events::{Event, MouseEvent, GLOBAL_EVENT_QUEUE};
+
                     // Filter: Only send if something actually changed
                     static mut LAST_X: usize = 9999;
                     static mut LAST_Y: usize = 9999;

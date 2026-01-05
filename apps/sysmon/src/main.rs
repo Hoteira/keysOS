@@ -1,7 +1,6 @@
 #![no_std]
 #![no_main]
 
-use std::{println};
 extern crate alloc;
 use alloc::format;
 use alloc::string::String;
@@ -29,7 +28,7 @@ impl AppState {
             processes: Vec::new(),
             selected_index: 0,
             scroll_offset: 0,
-            screen_height: 20, 
+            screen_height: 20,
         };
         app.refresh();
         app
@@ -56,7 +55,7 @@ impl AppState {
 
         for i in self.scroll_offset..end_index {
             let p = &self.processes[i];
-            
+
             if i == self.selected_index {
                 std::os::file_write(STDOUT_FD, b"\x1B[38;2;200;160;255m"); // Pastel Purple
             } else {
@@ -74,7 +73,7 @@ impl AppState {
 
             let name_str = String::from_utf8_lossy(&p.name);
             let clean_name = name_str.trim_matches(char::from(0));
-            
+
             let mem_bytes = std::os::get_process_memory(p.pid);
             let mem_str = if mem_bytes >= 1024 * 1024 {
                 format!("{:.1} MB", mem_bytes as f32 / 1024.0 / 1024.0)
@@ -119,8 +118,8 @@ impl AppState {
         if self.selected_index < self.processes.len() {
             let pid = self.processes[self.selected_index].pid;
             if pid > 2 {
-                 unsafe { std::os::syscall(78, pid, 0, 0) };
-                 self.refresh();
+                unsafe { std::os::syscall(78, pid, 0, 0) };
+                self.refresh();
             }
         }
     }
@@ -146,19 +145,31 @@ pub extern "C" fn _start() -> ! {
 
         let mut buf = [0u8; 1];
         if std::os::file_read(STDIN_FD, &mut buf) > 0 {
-             let c = buf[0] as char;
-             match c {
-                 'w' | 'W' => { app.move_up(); needs_redraw = true; },
-                 's' | 'S' => { app.move_down(); needs_redraw = true; },
-                 'k' | 'K' => { app.kill_selected(); needs_redraw = true; },
-                 'r' | 'R' => { app.refresh(); needs_redraw = true; },
-                 'q' | 'Q' => {
-                     // Restore buffer and cursor
-                     std::os::file_write(STDOUT_FD, b"\x1B[?1049l\x1B[?25h");
-                     std::os::exit(0);
-                 },
-                 _ => {}
-             }
+            let c = buf[0] as char;
+            match c {
+                'w' | 'W' => {
+                    app.move_up();
+                    needs_redraw = true;
+                }
+                's' | 'S' => {
+                    app.move_down();
+                    needs_redraw = true;
+                }
+                'k' | 'K' => {
+                    app.kill_selected();
+                    needs_redraw = true;
+                }
+                'r' | 'R' => {
+                    app.refresh();
+                    needs_redraw = true;
+                }
+                'q' | 'Q' => {
+                    // Restore buffer and cursor
+                    std::os::file_write(STDOUT_FD, b"\x1B[?1049l\x1B[?25h");
+                    std::os::exit(0);
+                }
+                _ => {}
+            }
         } else {
             std::os::yield_task();
         }

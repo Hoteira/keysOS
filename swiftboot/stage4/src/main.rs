@@ -1,8 +1,8 @@
 #![no_std]
 #![no_main]
 
-use core::arch::asm;
 use crate::debug::debug;
+use core::arch::asm;
 
 mod debug;
 mod disk;
@@ -30,10 +30,8 @@ pub extern "C" fn _start() -> ! {
         options(nostack),
         out("rdi") rdi,
         );
-
     }
 
-    
 
     unsafe {
         asm!(

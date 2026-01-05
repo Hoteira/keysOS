@@ -1,9 +1,9 @@
-use super::structs::*;
 use super::consts::*;
+use super::structs::*;
 use crate::memory::pmm;
+use crate::debugln;
 use core::ptr::{read_volatile, write_volatile};
 use std::memory::mmio::{read_16, write_16, write_64};
-use crate::{debugln};
 
 pub struct VirtQueue {
     pub desc_phys: u64,
@@ -47,8 +47,8 @@ pub fn setup_queue(common_cfg: *mut u8, index: u16, notify_base: u64, notify_mul
             let notify_addr = notify_base + (notify_off as u64 * notify_multiplier as u64);
 
             write_16(common_cfg.add(OFF_QUEUE_ENABLE), 1);
-            
-            
+
+
             let enabled = read_16(common_cfg.add(OFF_QUEUE_ENABLE));
             if enabled != 1 {
                 debugln!("VirtIO GPU: WARNING - Queue {} failed to enable! Read back: {}", index, enabled);
@@ -65,7 +65,7 @@ pub fn setup_queue(common_cfg: *mut u8, index: u16, notify_base: u64, notify_mul
                 last_avail_idx: 0,
                 notify_addr,
             });
-            
+
             debugln!("VirtIO GPU: Queue {} setup at phys {:#x}. Notify Off: {}, Addr: {:#x}", index, frame, notify_off, notify_addr);
         }
     }
@@ -95,31 +95,30 @@ pub fn send_command_queue(queue_idx: usize, out_phys: &[u64], out_lens: &[u32], 
         let mut current_desc_idx = free_head_usize;
 
 
-        
         for i in 0..out_phys.len() {
             *(vq.desc_phys as *mut VirtqDesc).add(current_desc_idx) = VirtqDesc {
                 addr: out_phys[i],
                 len: out_lens[i],
-                flags: if i == out_phys.len() - 1 && in_phys.len() == 0 { 0 } else { 1 }, 
+                flags: if i == out_phys.len() - 1 && in_phys.len() == 0 { 0 } else { 1 },
                 next: ((current_desc_idx + 1) % num_usize) as u16,
             };
             current_desc_idx = (current_desc_idx + 1) % num_usize;
         }
 
-        
+
         for i in 0..in_phys.len() {
             *(vq.desc_phys as *mut VirtqDesc).add(current_desc_idx) = VirtqDesc {
                 addr: in_phys[i],
                 len: in_lens[i],
-                flags: 2 | (if i == in_phys.len() - 1 { 0 } else { 1 }), 
+                flags: 2 | (if i == in_phys.len() - 1 { 0 } else { 1 }),
                 next: ((current_desc_idx + 1) % num_usize) as u16,
             };
             current_desc_idx = (current_desc_idx + 1) % num_usize;
         }
-        
-        
+
+
         let last_desc_idx = (free_head_usize + total_descs - 1) % num_usize;
-        (*(vq.desc_phys as *mut VirtqDesc).add(last_desc_idx)).next = 0; 
+        (*(vq.desc_phys as *mut VirtqDesc).add(last_desc_idx)).next = 0;
 
         let avail_ptr = vq.avail_phys as *mut VirtqAvail;
         let idx = (*avail_ptr).idx;
@@ -146,7 +145,7 @@ pub fn send_command_queue(queue_idx: usize, out_phys: &[u64], out_lens: &[u32], 
             if used_idx != vq.last_used_idx {
                 let diff = used_idx.wrapping_sub(vq.last_used_idx);
                 vq.last_used_idx = vq.last_used_idx.wrapping_add(diff);
-                
+
                 if vq.last_used_idx == vq.last_avail_idx {
                     success = true;
                     break;

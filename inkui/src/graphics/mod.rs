@@ -21,11 +21,11 @@ pub fn draw_pixel(buffer: &mut [u32], width: usize, x: usize, y: usize, color: C
             let r = ((color.r as u32 * alpha) + (prev.r as u32 * inv_alpha)) / 255;
             let g = ((color.g as u32 * alpha) + (prev.g as u32 * inv_alpha)) / 255;
             let b = ((color.b as u32 * alpha) + (prev.b as u32 * inv_alpha)) / 255;
-            
-            
+
+
             let a = (alpha + prev.a as u32).min(255);
-            
-            
+
+
             buffer[idx] = (a << 24) | (r << 16) | (g << 8) | b;
         }
     }

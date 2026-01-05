@@ -10,8 +10,8 @@ pub mod layout;
 pub mod widget;
 pub mod window;
 
-pub use window::Window;
-pub use widget::Widget;
-pub use layout::{Display, FlexDirection};
 pub use event::Event;
-pub use types::{Color, Size, Align, LinearGradient, GradientDirection, BackgroundStyle};
+pub use layout::{Display, FlexDirection};
+pub use types::{Align, BackgroundStyle, Color, GradientDirection, LinearGradient, Size};
+pub use widget::Widget;
+pub use window::Window;

@@ -1,10 +1,8 @@
-
 pub const VIRTIO_CAP_COMMON: u8 = 1;
 pub const VIRTIO_CAP_NOTIFY: u8 = 2;
 pub const VIRTIO_CAP_ISR: u8 = 3;
 pub const VIRTIO_CAP_DEVICE: u8 = 4;
 pub const VIRTIO_CAP_PCI: u8 = 5;
-
 
 
 pub const OFF_DEVICE_FEATURE_SELECT: usize = 0x00;

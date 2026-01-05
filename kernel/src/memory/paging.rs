@@ -7,7 +7,7 @@ pub const PAGE_WRITE_THROUGH: u64 = 1 << 3;
 pub const PAGE_NO_CACHE: u64 = 1 << 4;
 pub const PAGE_ACCESSED: u64 = 1 << 5;
 pub const PAGE_DIRTY: u64 = 1 << 6;
-pub const PAGE_PAT: u64 = 1 << 7; 
+pub const PAGE_PAT: u64 = 1 << 7;
 pub const PAGE_HUGE: u64 = 1 << 7;
 pub const PAGE_GLOBAL: u64 = 1 << 8;
 pub const PAGE_NO_EXECUTE: u64 = 1 << 63;
@@ -41,7 +41,7 @@ pub unsafe fn get_table<'a>(entry: u64) -> Option<&'a mut PageTable> {
     if entry & PAGE_HUGE != 0 {
         return None;
     }
-    
+
     let phys = entry & 0x000FFFFFFFFFF000;
     Some(unsafe { &mut *(phys as *mut PageTable) })
 }
@@ -49,7 +49,7 @@ pub unsafe fn get_table<'a>(entry: u64) -> Option<&'a mut PageTable> {
 pub unsafe fn get_entry_ptr(virt: u64) -> Option<*mut u64> {
     let p4 = unsafe { active_level_4_table() };
     let p4_idx = (virt >> 39) & 0x1FF;
-    
+
     let p3_entry = p4.entries[p4_idx as usize];
     let p3 = unsafe { get_table(p3_entry) }?;
     let p3_idx = (virt >> 30) & 0x1FF;
@@ -73,7 +73,7 @@ pub unsafe fn translate_addr(virt: u64) -> Option<u64> {
 pub unsafe fn translate_addr_with_entry(virt: u64) -> Option<(u64, u64)> {
     let p4 = unsafe { active_level_4_table() };
     let p4_idx = (virt >> 39) & 0x1FF;
-    
+
     let p3_entry = p4.entries[p4_idx as usize];
     if p3_entry & PAGE_PRESENT == 0 { return None; }
     if p3_entry & PAGE_HUGE != 0 {
@@ -83,7 +83,7 @@ pub unsafe fn translate_addr_with_entry(virt: u64) -> Option<(u64, u64)> {
 
     let p3 = unsafe { &mut *((p3_entry & 0x000FFFFFFFFFF000) as *mut PageTable) };
     let p3_idx = (virt >> 30) & 0x1FF;
-    
+
     let p2_entry = p3.entries[p3_idx as usize];
     if p2_entry & PAGE_PRESENT == 0 { return None; }
     if p2_entry & PAGE_HUGE != 0 {
@@ -96,10 +96,10 @@ pub unsafe fn translate_addr_with_entry(virt: u64) -> Option<(u64, u64)> {
 
     let p1_entry = p2.entries[p2_idx as usize];
     if p1_entry & PAGE_PRESENT == 0 { return None; }
-    
+
     let p1 = unsafe { &mut *((p1_entry & 0x000FFFFFFFFFF000) as *mut PageTable) };
     let p1_idx = (virt >> 12) & 0x1FF;
-    
+
     let entry = p1.entries[p1_idx as usize];
     if entry & PAGE_PRESENT == 0 { return None; }
 

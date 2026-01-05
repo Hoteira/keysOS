@@ -1,10 +1,9 @@
-use core::arch::asm;
 use crate::drivers::port::*;
+use core::arch::asm;
 
 
 #[allow(dead_code)]
 pub fn read(lba: u64, disk: u8, buffer: &mut [u8]) {
-
     if crate::fs::virtio::is_active() {
         crate::fs::virtio::read(lba, disk, buffer);
         return;
@@ -19,7 +18,7 @@ pub fn read(lba: u64, disk: u8, buffer: &mut [u8]) {
 
     let total_bytes = buffer.len();
     let sector_count = (total_bytes + 511) / 512;
-    
+
     outb(0x3f6, 0b00000010);
 
     outb(0x1F1, 0x00);
@@ -27,10 +26,10 @@ pub fn read(lba: u64, disk: u8, buffer: &mut [u8]) {
 
     let mut current_lba = lba;
     let mut bytes_read = 0;
-    
+
     while bytes_read < total_bytes {
         let bytes_remaining = total_bytes - bytes_read;
-        
+
         while is_busy() {}
 
         outb(0x1F2, 1);
@@ -46,16 +45,16 @@ pub fn read(lba: u64, disk: u8, buffer: &mut [u8]) {
         for i in 0..256 {
             let word = inw(0x1F0);
             if bytes_remaining > 0 {
-                 let current_offset = bytes_read + i * 2;
-                 if current_offset < total_bytes {
-                     buffer[current_offset] = (word & 0xFF) as u8;
-                 }
-                 if current_offset + 1 < total_bytes {
-                     buffer[current_offset + 1] = (word >> 8) as u8;
-                 }
+                let current_offset = bytes_read + i * 2;
+                if current_offset < total_bytes {
+                    buffer[current_offset] = (word & 0xFF) as u8;
+                }
+                if current_offset + 1 < total_bytes {
+                    buffer[current_offset + 1] = (word >> 8) as u8;
+                }
             }
         }
-        
+
         bytes_read += 512;
         current_lba += 1;
     }
@@ -77,7 +76,7 @@ pub fn write(lba: u64, disk: u8, buffer: &[u8]) {
 
     let total_bytes = buffer.len();
     let _sector_count = (total_bytes + 511) / 512;
-    
+
     let mut current_lba = lba;
     let mut bytes_written = 0;
 
@@ -97,19 +96,19 @@ pub fn write(lba: u64, disk: u8, buffer: &[u8]) {
         while !is_ready() {}
 
         for i in 0..256 {
-             let current_offset = bytes_written + i * 2;
-             let mut word: u16 = 0;
+            let current_offset = bytes_written + i * 2;
+            let mut word: u16 = 0;
 
-             if current_offset < total_bytes {
-                 word |= buffer[current_offset] as u16;
-             }
-             if current_offset + 1 < total_bytes {
-                 word |= (buffer[current_offset + 1] as u16) << 8;
-             }
-             
-             outw(0x1F0, word);
+            if current_offset < total_bytes {
+                word |= buffer[current_offset] as u16;
+            }
+            if current_offset + 1 < total_bytes {
+                word |= (buffer[current_offset + 1] as u16) << 8;
+            }
+
+            outw(0x1F0, word);
         }
-        
+
         bytes_written += 512;
         current_lba += 1;
     }

@@ -89,8 +89,8 @@ impl Pics {
         self.master.unmask_irq(0);
         self.master.unmask_irq(1);
         self.master.unmask_irq(2);
-        
-        
+
+
         self.slave.unmask_irq(4);
     }
 

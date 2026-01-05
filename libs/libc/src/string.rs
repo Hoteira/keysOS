@@ -1,14 +1,14 @@
-use core::ffi::{c_void, c_char, c_int};
 use crate::ctype::toupper;
+use core::ffi::{c_char, c_int, c_void};
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn memset(s: *mut c_void, c: c_int, n: usize) -> *mut c_void {
     core::arch::asm!(
-        "rep stosb",
-        inout("rdi") s => _,
-        in("al") c as u8,
-        inout("rcx") n => _,
-        options(nostack, preserves_flags)
+    "rep stosb",
+    inout("rdi") s => _,
+    in("al") c as u8,
+    inout("rcx") n => _,
+    options(nostack, preserves_flags)
     );
 
     s
@@ -17,11 +17,11 @@ pub unsafe extern "C" fn memset(s: *mut c_void, c: c_int, n: usize) -> *mut c_vo
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn memcpy(d: *mut c_void, s: *const c_void, n: usize) -> *mut c_void {
     core::arch::asm!(
-        "rep movsb",
-        inout("rdi") d => _,
-        inout("rsi") s => _,
-        inout("rcx") n => _,
-        options(nostack, preserves_flags)
+    "rep movsb",
+    inout("rdi") d => _,
+    inout("rsi") s => _,
+    inout("rcx") n => _,
+    options(nostack, preserves_flags)
     );
 
     d
@@ -32,21 +32,21 @@ pub unsafe extern "C" fn memcpy(d: *mut c_void, s: *const c_void, n: usize) -> *
 pub unsafe extern "C" fn memmove(d: *mut c_void, s: *const c_void, n: usize) -> *mut c_void {
     if d > s as *mut c_void {
         core::arch::asm!(
-            "std",
-            "rep movsb",
-            "cld",
-            inout("rdi") (d as usize + n).wrapping_sub(1) => _,
-            inout("rsi") (s as usize + n).wrapping_sub(1) => _,
-            inout("rcx") n => _,
-            options(nostack)
+        "std",
+        "rep movsb",
+        "cld",
+        inout("rdi") (d as usize + n).wrapping_sub(1) => _,
+        inout("rsi") (s as usize + n).wrapping_sub(1) => _,
+        inout("rcx") n => _,
+        options(nostack)
         );
     } else {
         core::arch::asm!(
-            "rep movsb",
-            inout("rdi") d => _,
-            inout("rsi") s => _,
-            inout("rcx") n => _,
-            options(nostack, preserves_flags)
+        "rep movsb",
+        inout("rdi") d => _,
+        inout("rsi") s => _,
+        inout("rcx") n => _,
+        options(nostack, preserves_flags)
         );
     }
 
@@ -111,7 +111,8 @@ pub unsafe extern "C" fn strncasecmp(s1: *const c_char, s2: *const c_char, n: us
     0
 }
 
-#[unsafe(no_mangle)] pub unsafe extern "C" fn strcpy(d: *mut c_char, s: *const c_char) -> *mut c_char {
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn strcpy(d: *mut c_char, s: *const c_char) -> *mut c_char {
     let mut i = 0;
     loop {
         let c = *s.add(i);
@@ -134,11 +135,13 @@ pub unsafe extern "C" fn strncpy(d: *mut c_char, s: *const c_char, n: usize) -> 
 
         if c == 0 { break; }
 
-        *d.add(i) = c; i += 1;
+        *d.add(i) = c;
+        i += 1;
     }
 
     while i < n {
-        *d.add(i) = 0; i += 1;
+        *d.add(i) = 0;
+        i += 1;
     }
 
     d

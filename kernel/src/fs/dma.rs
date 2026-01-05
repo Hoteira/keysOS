@@ -5,8 +5,6 @@ use crate::drivers::port::*;
 fn test_pci_detection() {
     unsafe {
         if let Some(dev) = find_device(0x8086, 0x7010) {
-
-
             BM_BASE = dev.get_bar(4).unwrap() as u16;
             BMR_COMMAND = BM_BASE + 0;
             BMR_STATUS = BM_BASE + 2;
@@ -68,7 +66,7 @@ pub fn read(lba: u64, disk: u8, target: &mut [u8]) {
 
         outl(BMR_PRDT, core::ptr::addr_of!(PRDT) as u32);
 
-        
+
         let drive_select = 0xE0 | ((disk & 1) << 4);
         outb(ATA_DISK, (drive_select as u64 | ((lba >> 24) & 0x0F)) as u8);
 
@@ -106,7 +104,6 @@ pub fn read(lba: u64, disk: u8, target: &mut [u8]) {
 pub fn write(lba: u64, disk: u8, buffer: &[u8]) {
     let sectors = (buffer.len() / 512) as u8;
     unsafe {
-
         outb(BMR_COMMAND, 0);
 
         PRDT.buffer_phys = buffer.as_ptr() as u32;

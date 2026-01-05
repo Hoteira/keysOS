@@ -5,15 +5,15 @@ pub unsafe fn syscall(num: u64, arg1: u64, arg2: u64, arg3: u64) -> u64 {
 
     unsafe {
         asm!(
-            "syscall",
-            in("rax") num,
-            in("rdi") arg1,
-            in("rsi") arg2,
-            in("rdx") arg3,
-            lateout("rax") result,
-            out("rcx") _,
-            out("r11") _,
-            options(nostack, preserves_flags)
+        "syscall",
+        in("rax") num,
+        in("rdi") arg1,
+        in("rsi") arg2,
+        in("rdx") arg3,
+        lateout("rax") result,
+        out("rcx") _,
+        out("r11") _,
+        options(nostack, preserves_flags)
         );
     }
 
@@ -25,16 +25,16 @@ pub unsafe fn syscall4(num: u64, arg1: u64, arg2: u64, arg3: u64, arg4: u64) -> 
 
     unsafe {
         asm!(
-            "syscall",
-            in("rax") num,
-            in("rdi") arg1,
-            in("rsi") arg2,
-            in("rdx") arg3,
-            in("r10") arg4,
-            lateout("rax") result,
-            out("rcx") _,
-            out("r11") _,
-            options(nostack, preserves_flags)
+        "syscall",
+        in("rax") num,
+        in("rdi") arg1,
+        in("rsi") arg2,
+        in("rdx") arg3,
+        in("r10") arg4,
+        lateout("rax") result,
+        out("rcx") _,
+        out("r11") _,
+        options(nostack, preserves_flags)
         );
     }
 
@@ -46,17 +46,17 @@ pub unsafe fn syscall5(num: u64, arg1: u64, arg2: u64, arg3: u64, arg4: u64, arg
 
     unsafe {
         asm!(
-            "syscall",
-            in("rax") num,
-            in("rdi") arg1,
-            in("rsi") arg2,
-            in("rdx") arg3,
-            in("r10") arg4,
-            in("r8") arg5,
-            lateout("rax") result,
-            out("rcx") _,
-            out("r11") _,
-            options(nostack, preserves_flags)
+        "syscall",
+        in("rax") num,
+        in("rdi") arg1,
+        in("rsi") arg2,
+        in("rdx") arg3,
+        in("r10") arg4,
+        in("r8") arg5,
+        lateout("rax") result,
+        out("rcx") _,
+        out("r11") _,
+        options(nostack, preserves_flags)
         );
     }
 
@@ -70,7 +70,6 @@ pub fn print(s: &str) {
 }
 
 pub fn sleep(ms: u64) {
-
     if ms > 10 {
         unsafe {
             syscall(76, ms, 0, 0);
@@ -84,9 +83,7 @@ pub fn yield_task() {
     unsafe {
         asm!("int 0x81");
     }
-
 }
-
 
 
 pub fn read(buffer: &mut [u8]) -> usize {
@@ -126,15 +123,11 @@ pub fn file_close(fd: usize) -> i32 {
 }
 
 pub fn exit(code: u64) -> ! {
-
     unsafe {
-
         syscall(60, code, 0, 0);
 
         loop { asm!("hlt"); }
-
     }
-
 }
 
 pub fn exec(path: &str) {
@@ -200,21 +193,21 @@ pub fn get_system_ticks() -> u64 {
 #[repr(C)]
 pub struct ProcessInfo {
     pub pid: u64,
-    pub state: u64, 
+    pub state: u64,
     pub name: [u8; 32],
 }
 
 pub fn get_process_list() -> alloc::vec::Vec<ProcessInfo> {
     let max_count = 128;
     let mut processes = alloc::vec::Vec::with_capacity(max_count);
-    
+
     // Initialize with default values to set length safely (ProcessInfo is Copy)
     processes.resize(max_count, ProcessInfo { pid: 0, state: 0, name: [0; 32] });
-    
+
     let count = unsafe {
         syscall(77, processes.as_mut_ptr() as u64, max_count as u64, 0) as usize
     };
-    
+
     // Truncate to actual count returned by kernel
     if count <= max_count {
         processes.truncate(count);

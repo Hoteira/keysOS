@@ -29,26 +29,25 @@ pub(crate) fn setup_paging(fb_addr: u64, fb_size: u64) {
         core::ptr::write_bytes(pd2, 0, 1);
         core::ptr::write_bytes(pd3, 0, 1);
 
-        
-        (*pml4).entries[0] = PDPT_ADDR | 0b111; 
 
-        
+        (*pml4).entries[0] = PDPT_ADDR | 0b111;
+
+
         (*pdpt).entries[0] = PD0_ADDR | 0b111;
         (*pdpt).entries[1] = PD1_ADDR | 0b111;
         (*pdpt).entries[2] = PD2_ADDR | 0b111;
         (*pdpt).entries[3] = PD3_ADDR | 0b111;
 
-        
+
         let fill_pd = |pd: *mut PageTable, start_phys: u64| {
             for i in 0..512 {
                 let phys = start_phys + (i as u64 * 0x200000);
                 let page_end = phys + 0x200000;
                 let fb_end = fb_addr + fb_size;
-                
-                let mut flags = 0b10000111; 
-                
-                
-                
+
+                let mut flags = 0b10000111;
+
+
                 (*pd).entries[i] = phys | flags;
             }
         };

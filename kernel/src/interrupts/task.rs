@@ -1,7 +1,7 @@
 use core::arch::{asm, naked_asm};
 
-use crate::memory::pmm;
 use crate::debugln;
+use crate::memory::pmm;
 
 #[allow(dead_code)]
 const STACK_SIZE: u64 = 64 * 1024;
@@ -83,15 +83,15 @@ impl Task {
         self.name = [0; 32];
         let len = core::cmp::min(name.len(), 32);
         self.name[..len].copy_from_slice(&name[..len]);
-        
+
         self.cwd = [0; 128];
         let root = b"@0xE0/";
         self.cwd[..root.len()].copy_from_slice(root);
-        
+
         self.fpu_state[0] = 0x7F;
 
         self.fpu_state[1] = 0x03;
-        
+
         self.fpu_state[24] = 0x80;
         self.fpu_state[25] = 0x1F;
 
@@ -151,7 +151,7 @@ impl Task {
 
         self.pml4_phys = pml4_phys;
 
-        
+
         let k_frame = match pmm::allocate_frames(16, pid) {
             Some(addr) => addr,
             None => return Err(pmm::FrameError::NoMemory),
@@ -161,10 +161,9 @@ impl Task {
         let u_frame = match pmm::allocate_frames(16, pid) {
             Some(addr) => addr,
             None => {
-                pmm::free_frame(k_frame); 
-                
-                
-                
+                pmm::free_frame(k_frame);
+
+
                 pmm::free_frame(k_frame);
                 return Err(pmm::FrameError::NoMemory);
             }
@@ -263,15 +262,15 @@ impl TaskManager {
         if pid < MAX_TASKS as u64 {
             let task = &mut self.tasks[pid as usize];
             if task.state != TaskState::Null && task.state != TaskState::Zombie && task.state != TaskState::Null {
-                task.exit_code = 0xDEAD; 
+                task.exit_code = 0xDEAD;
                 task.state = TaskState::Zombie;
 
-                
+
                 unsafe {
                     (*(&raw mut crate::window_manager::composer::COMPOSER)).remove_windows_by_pid(pid);
                 }
 
-                
+
                 for i in 0..16 {
                     let global = task.fd_table[i];
                     if global != -1 {
@@ -287,11 +286,10 @@ impl TaskManager {
     pub fn init_user_task(&mut self, slot: usize, entry_point: u64, pml4_phys: u64, args: Option<&[u64]>, fd_table: Option<[i16; 16]>, name: &[u8]) -> Result<(), pmm::FrameError> {
         if slot >= MAX_TASKS { return Err(pmm::FrameError::IndexOutOfBounds); }
 
-        
+
         match self.tasks[slot].init_user(entry_point, pml4_phys, args, slot as u64, fd_table, name) {
             Ok(_) => Ok(()),
             Err(e) => {
-                
                 self.tasks[slot].state = TaskState::Null;
                 self.task_count -= 1;
                 Err(e)
@@ -478,11 +476,11 @@ pub extern "C" fn switch_yield(rsp: u64) -> u64 {
 unsafe fn common_switch(rsp: u64, is_timer: bool) -> u64 {
     unsafe {
         if is_timer {
-            SYSTEM_TICKS = SYSTEM_TICKS.wrapping_add(10); 
+            SYSTEM_TICKS = SYSTEM_TICKS.wrapping_add(10);
         }
         let mut tm = TASK_MANAGER.int_lock();
 
-        
+
         if tm.current_task >= 0 {
             let index = tm.current_task as usize;
             let task_ptr = &mut tm.tasks[index] as *mut Task;
@@ -492,7 +490,7 @@ unsafe fn common_switch(rsp: u64, is_timer: bool) -> u64 {
 
         let (new_state, k_stack, _pml4_phys) = tm.schedule(rsp as *mut CPUState);
 
-        
+
         if tm.current_task >= 0 {
             let index = tm.current_task as usize;
             let task_ptr = &tm.tasks[index] as *const Task;

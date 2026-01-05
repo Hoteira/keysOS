@@ -2,11 +2,11 @@
 #![no_std]
 #![feature(naked_functions)]
 
+extern crate alloc;
 #[macro_use]
 extern crate std;
-extern crate alloc;
 
-use core::ffi::{c_int, c_char};
+use core::ffi::{c_char, c_int};
 
 pub mod string;
 pub mod ctype;
@@ -48,4 +48,8 @@ pub unsafe extern "C" fn rust_start(stack: *const usize) -> ! {
 #[unsafe(no_mangle)]
 pub static mut errno: c_int = 0;
 
-#[panic_handler] pub fn panic(i: &core::panic::PanicInfo) -> ! { std::println!("[USER PANIC] {}", i); loop {} }
+#[panic_handler]
+pub fn panic(i: &core::panic::PanicInfo) -> ! {
+    std::println!("[USER PANIC] {}", i);
+    loop {}
+}

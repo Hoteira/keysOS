@@ -1,8 +1,7 @@
-use super::window::{Window, Items, NULL_WINDOW};
-use crate::window_manager::display::DISPLAY_SERVER;
-use crate::window_manager::events::{Event, ResizeEvent, GLOBAL_EVENT_QUEUE};
-use crate::window_manager::input::CLICKED_WINDOW_ID;
+use super::window::{Items, Window, NULL_WINDOW};
 use crate::debugln;
+use crate::window_manager::display::DISPLAY_SERVER;
+use crate::window_manager::input::CLICKED_WINDOW_ID;
 
 #[derive(Debug, Clone)]
 pub struct Composer {
@@ -122,12 +121,12 @@ impl Composer {
 
         if let Some(idx) = target_idx {
             let wtype = self.windows[idx].w_type;
-            
+
             if wtype == Items::Bar || wtype == Items::Popup || wtype == Items::Wallpaper {
                 return;
             }
 
-            
+
             self.windows[idx].z = 1;
 
             for i in 0..self.windows.len() {
@@ -135,15 +134,14 @@ impl Composer {
                 match self.windows[i].w_type {
                     Items::Bar | Items::Popup | Items::Null | Items::Wallpaper => {}
                     _ => {
-                        
                         self.windows[i].z = self.windows[i].z.saturating_add(1);
                     }
                 }
             }
 
             self.windows.sort_by_key(|w| w.z);
-            
-            
+
+
             let (sw, sh) = unsafe {
                 ((*(&raw mut DISPLAY_SERVER)).width as u32, (*(&raw mut DISPLAY_SERVER)).height as u32)
             };
@@ -152,9 +150,6 @@ impl Composer {
     }
 
     pub fn update_tiling(&mut self) {
-        
-        
-
         let (screen_w, screen_h) = unsafe {
             ((*(&raw mut DISPLAY_SERVER)).width as usize, (*(&raw mut DISPLAY_SERVER)).height as usize)
         };
@@ -166,7 +161,7 @@ impl Composer {
             }
         }
 
-        
+
         self.update_window_area_rect(0, 0, screen_w as u32, screen_h as u32);
     }
 
@@ -194,7 +189,7 @@ impl Composer {
 
         w.id = self.check_id(w.buffer as u64);
 
-        
+
         if wtype == Items::Window {
             let mut count = 0;
             for i in 0..self.windows.len() {
@@ -202,7 +197,7 @@ impl Composer {
                     count += 1;
                 }
             }
-            
+
             let offset = 30;
             let start_x = 50;
             let start_y = 50;
@@ -210,7 +205,7 @@ impl Composer {
             w.x = (start_x + (count * offset)) as isize;
             w.y = (start_y + (count * offset)) as isize;
 
-            
+
             w.can_move = true;
             w.can_resize = true;
         }
@@ -231,8 +226,8 @@ impl Composer {
             match self.windows[i].w_type {
                 Items::Bar | Items::Popup => {
                     self.windows[i].z = 0;
-                },
-                Items::Null => {},
+                }
+                Items::Null => {}
                 _ => {
                     if wtype == Items::Bar || wtype == Items::Popup {
                         if self.windows[i].z == 0 { self.windows[i].z = 1; }
@@ -253,20 +248,19 @@ impl Composer {
     pub fn resize_window(&mut self, w: Window) {
         for i in 0..self.windows.len() {
             if w.id == self.windows[i].id {
-                
                 self.windows[i].buffer = w.buffer;
 
-                
+
                 let old_x = self.windows[i].x;
                 let old_y = self.windows[i].y;
                 let old_w = self.windows[i].width;
                 let old_h = self.windows[i].height;
 
-                
+
                 self.windows[i].width = w.width;
                 self.windows[i].height = w.height;
 
-                
+
                 if self.windows[i].w_type != Items::Window {
                     self.windows[i].x = w.x;
                     self.windows[i].y = w.y;
@@ -276,7 +270,7 @@ impl Composer {
                 self.windows[i].transparent = w.transparent;
                 self.windows[i].treat_as_transparent = w.treat_as_transparent;
 
-                
+
                 let current_x = self.windows[i].x;
                 let current_y = self.windows[i].y;
 
@@ -293,7 +287,6 @@ impl Composer {
                 }
 
                 if self.windows[i].w_type == Items::Window {
-                    
                     self.update_tiling();
                 }
 
@@ -317,9 +310,7 @@ impl Composer {
                 let end_x = (dirty_x + dirty_w as i32).min(width);
                 let end_y = (dirty_y + dirty_h as i32).min(height);
 
-                if end_x > start_x && end_y > start_y {
-                    
-                }
+                if end_x > start_x && end_y > start_y {}
             }
 
             // Occlusion Culling: Find the front-most window that is opaque and covers the dirty rect.
@@ -328,13 +319,13 @@ impl Composer {
             for i in 0..self.windows.len() {
                 let w = &self.windows[i];
                 if w.w_type == Items::Null { continue; }
-                
+
                 // If window covers the dirty rect and is opaque
-                if !w.treat_as_transparent && 
-                   w.x as i32 <= dirty_x && 
-                   w.y as i32 <= dirty_y && 
-                   (w.x as i32 + w.width as i32) >= (dirty_x + dirty_w as i32) &&
-                   (w.y as i32 + w.height as i32) >= (dirty_y + dirty_h as i32) {
+                if !w.treat_as_transparent &&
+                    w.x as i32 <= dirty_x &&
+                    w.y as i32 <= dirty_y &&
+                    (w.x as i32 + w.width as i32) >= (dirty_x + dirty_w as i32) &&
+                    (w.y as i32 + w.height as i32) >= (dirty_y + dirty_h as i32) {
                     start_index = i;
                     break;
                 }

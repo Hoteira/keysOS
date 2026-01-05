@@ -7,9 +7,9 @@ pub mod relocation;
 pub mod symbol;
 
 pub use header::Elf64Ehdr;
-pub use program_header::{Elf64Phdr, ProgramType, ProgramFlags};
-pub use section_header::Elf64Shdr;
+pub use program_header::{Elf64Phdr, ProgramFlags, ProgramType};
 pub use relocation::Elf64Rela;
+pub use section_header::Elf64Shdr;
 pub use symbol::Elf64Sym;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,31 +35,31 @@ impl<'a> Elf64<'a> {
 
         let header = unsafe { &*(data.as_ptr() as *const Elf64Ehdr) };
 
-        
-        if header.e_ident[0] != 0x7f 
-            || header.e_ident[1] != b'E' 
-            || header.e_ident[2] != b'L' 
-            || header.e_ident[3] != b'F' 
+
+        if header.e_ident[0] != 0x7f
+            || header.e_ident[1] != b'E'
+            || header.e_ident[2] != b'L'
+            || header.e_ident[3] != b'F'
         {
             return Err(ElfError::InvalidMagic);
         }
 
-        
+
         if header.e_ident[4] != 2 {
             return Err(ElfError::InvalidClass);
         }
 
-        
+
         if header.e_ident[5] != 1 {
             return Err(ElfError::InvalidData);
         }
 
-        
+
         if header.e_ident[6] != 1 {
             return Err(ElfError::InvalidVersion);
         }
 
-        
+
         if header.e_machine != 0x3E {
             return Err(ElfError::InvalidMachine);
         }
@@ -77,13 +77,13 @@ impl<'a> Elf64<'a> {
         let size = self.header.e_phentsize as usize;
 
         if offset + (num * size) > self.data.len() {
-            return &[]; 
+            return &[];
         }
 
         unsafe {
             core::slice::from_raw_parts(
                 self.data.as_ptr().add(offset) as *const Elf64Phdr,
-                num
+                num,
             )
         }
     }
@@ -104,7 +104,7 @@ impl<'a> Elf64<'a> {
         unsafe {
             core::slice::from_raw_parts(
                 self.data.as_ptr().add(offset) as *const Elf64Shdr,
-                num
+                num,
             )
         }
     }

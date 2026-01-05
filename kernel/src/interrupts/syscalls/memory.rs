@@ -3,7 +3,7 @@ use crate::interrupts::task::CPUState;
 pub fn handle_malloc(context: &mut CPUState) {
     let size = context.rdi as usize;
     let pages = (size + 4095) / 4096;
-    
+
     let pid = {
         let tm = crate::interrupts::task::TASK_MANAGER.int_lock();
         if tm.current_task >= 0 {
@@ -21,9 +21,9 @@ pub fn handle_malloc(context: &mut CPUState) {
 }
 
 pub fn handle_free(context: &mut CPUState) {
-     let ptr = context.rdi;
-     crate::memory::pmm::free_frame(ptr);
-     context.rax = 0;
+    let ptr = context.rdi;
+    crate::memory::pmm::free_frame(ptr);
+    context.rax = 0;
 }
 
 pub fn handle_get_process_mem(context: &mut CPUState) {

@@ -12,12 +12,12 @@ mod rsdp;
 use core::ptr::addr_of;
 use gdt::GDT;
 
-use core::arch::asm;
-use core::panic::PanicInfo;
 use crate::debug::debug;
 use crate::mmap::{get_mmap, MemoryMap};
 use crate::rsdp::{get_rsdp, Rsdp};
 use crate::vbe::{find_vbe_mode, get_vbe_info, VbeInfoBlock, VbeModeInfoBlock};
+use core::arch::asm;
+use core::panic::PanicInfo;
 
 
 static mut BOOT: BootInfo = unsafe { core::mem::zeroed() };
@@ -151,7 +151,6 @@ fn make_desc(base: u32, limit: u16) -> u64 {
 
 fn protected_mode() {
     unsafe {
-
         let tss_addr = (*(&raw mut GDT)).write_tss();
         (*(&raw mut GDT)).load();
 
@@ -172,14 +171,13 @@ fn protected_mode() {
             );
         }
 
-        asm!("mov eax, cr0", "or eax, 1 << 0", "mov cr0, eax",);
+        asm!("mov eax, cr0", "or eax, 1 << 0", "mov cr0, eax", );
 
         asm!("mov bx, {0:x}", in(reg) addr_of!(BOOT) as u16);
 
         asm!("ljmp $0x8, ${}", const STAGE3_RAM, options(att_syntax));
     }
 }
-
 
 
 #[panic_handler]

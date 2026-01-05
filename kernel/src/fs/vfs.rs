@@ -1,8 +1,7 @@
 use alloc::boxed::Box;
-use alloc::vec::Vec;
 use alloc::string::String;
 use alloc::string::ToString;
-
+use alloc::vec::Vec;
 
 
 pub static mut FILESYSTEMS: [Option<Box<dyn FileSystem>>; 256] = [const { None }; 256];
@@ -56,17 +55,17 @@ pub fn get_file(fd: usize) -> Option<&'static mut FileHandle> {
 
 pub fn close_file(fd: usize) {
     unsafe {
-         if fd < 256 {
-             if GLOBAL_FILE_REFCOUNT[fd] > 0 {
-                 GLOBAL_FILE_REFCOUNT[fd] -= 1;
-                 if GLOBAL_FILE_REFCOUNT[fd] == 0 {
-                     if let Some(FileHandle::Pipe { pipe }) = &OPEN_FILES[fd] {
-                         pipe.close();
-                     }
-                     OPEN_FILES[fd] = None;
-                 }
-             }
-         }
+        if fd < 256 {
+            if GLOBAL_FILE_REFCOUNT[fd] > 0 {
+                GLOBAL_FILE_REFCOUNT[fd] -= 1;
+                if GLOBAL_FILE_REFCOUNT[fd] == 0 {
+                    if let Some(FileHandle::Pipe { pipe }) = &OPEN_FILES[fd] {
+                        pipe.close();
+                    }
+                    OPEN_FILES[fd] = None;
+                }
+            }
+        }
     }
 }
 
@@ -80,26 +79,25 @@ pub fn increment_ref(fd: usize) {
 
 pub fn open(disk_id: u8, path_str: &str) -> Result<Box<dyn VfsNode>, String> {
     crate::debug::serial_print_str("vfs::open: start\r\n");
-    
-    
+
+
     crate::debugln!("vfs::open: disk_id check...");
-    
-    
-    
+
+
     let components: Vec<String> = path_str.split('/').filter(|s| !s.is_empty()).map(|s| s.to_string()).collect();
 
     unsafe {
         crate::debugln!("Accessing FILESYSTEMS at index {}", disk_id);
         if let Some(fs) = &mut FILESYSTEMS[disk_id as usize] {
-             crate::debugln!("FS box ptr: {:p}", fs);
-             crate::debugln!("vfs::open: found fs, calling root()");
-             let mut node = fs.root()?;
-             for component in components.iter() {
-                 crate::debugln!("vfs::open: finding component {}", component);
-                 node = node.find(&component)?;
-             }
-             crate::debugln!("vfs::open: done");
-             Ok(node)
+            crate::debugln!("FS box ptr: {:p}", fs);
+            crate::debugln!("vfs::open: found fs, calling root()");
+            let mut node = fs.root()?;
+            for component in components.iter() {
+                crate::debugln!("vfs::open: finding component {}", component);
+                node = node.find(&component)?;
+            }
+            crate::debugln!("vfs::open: done");
+            Ok(node)
         } else {
             Err(String::from("Disk ID not mounted"))
         }
@@ -115,12 +113,12 @@ pub fn read(disk_id: u8, path_str: &str, offset: u64, size: u64, buffer: *mut u8
 
     unsafe {
         if let Some(fs) = &mut FILESYSTEMS[disk_id as usize] {
-             let mut node = fs.root()?;
-             for component in components {
-                 node = node.find(&component)?;
-             }
-             let slice = core::slice::from_raw_parts_mut(buffer, size as usize);
-             node.read(offset, slice)
+            let mut node = fs.root()?;
+            for component in components {
+                node = node.find(&component)?;
+            }
+            let slice = core::slice::from_raw_parts_mut(buffer, size as usize);
+            node.read(offset, slice)
         } else {
             Err(String::from("Disk ID not mounted"))
         }
@@ -144,13 +142,13 @@ pub trait VfsNode {
     fn name(&self) -> String;
     fn size(&self) -> u64;
     fn kind(&self) -> FileType;
-    
+
     fn read(&mut self, offset: u64, buffer: &mut [u8]) -> Result<usize, String>;
     fn write(&mut self, offset: u64, buffer: &[u8]) -> Result<usize, String>;
-    
+
     fn children(&mut self) -> Result<Vec<Box<dyn VfsNode>>, String>;
     fn find(&mut self, name: &str) -> Result<Box<dyn VfsNode>, String>;
-    
+
     fn create_file(&mut self, _name: &str) -> Result<Box<dyn VfsNode>, String> { Err(String::from("Not supported")) }
     fn create_dir(&mut self, _name: &str) -> Result<Box<dyn VfsNode>, String> { Err(String::from("Not supported")) }
     fn remove(&mut self, _name: &str) -> Result<(), String> { Err(String::from("Not supported")) }

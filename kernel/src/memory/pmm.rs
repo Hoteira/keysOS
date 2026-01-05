@@ -1,6 +1,6 @@
-use core::sync::atomic::{AtomicBool, Ordering};
 use crate::boot::BOOT_INFO;
 use crate::debugln;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 
 pub const PAGE_SIZE: u64 = 4096;
@@ -56,118 +56,129 @@ pub fn init() {
     }
 }
 
-unsafe fn add_allocation(pid: u64, start: u64, count: usize) -> bool { unsafe {
-    let pmm_ptr = &raw mut PMM;
+unsafe fn add_allocation(pid: u64, start: u64, count: usize) -> bool {
+    unsafe {
+        let pmm_ptr = &raw mut PMM;
 
-    let mut count_used = 0;
-    for i in 0..MAX_ALLOCS {
-        if (*pmm_ptr).allocations[i].used {
-            count_used += 1;
-        }
-    }
-
-    if count_used >= MAX_ALLOCS {
-        return false;
-    }
-
-    let mut idx = 0;
-    while idx < count_used {
-        if (*pmm_ptr).allocations[idx].start > start {
-            break;
-        }
-        idx += 1;
-    }
-
-    if idx < count_used {
-        for i in (idx..count_used).rev() {
-            (*pmm_ptr).allocations[i+1] = (*pmm_ptr).allocations[i];
-        }
-    }
-
-    (*pmm_ptr).allocations[idx] = FrameAllocation {
-        pid,
-        start,
-        count,
-        used: true,
-    };
-
-    true
-}}
-
-unsafe fn remove_allocation(start: u64) { unsafe {
-    let pmm_ptr = &raw mut PMM;
-    let mut found_idx = MAX_ALLOCS;
-    let mut count_used = 0;
-
-    for i in 0..MAX_ALLOCS {
-        if (*pmm_ptr).allocations[i].used {
-            count_used += 1;
-            if (*pmm_ptr).allocations[i].start == start {
-                found_idx = i;
-            }
-        } else {
-            break;
-        }
-    }
-
-    if found_idx != MAX_ALLOCS {
-        
-        let start_addr = (*pmm_ptr).allocations[found_idx].start;
-        let size = (*pmm_ptr).allocations[found_idx].count as u64 * PAGE_SIZE;
-        core::ptr::write_bytes(start_addr as *mut u8, 0, size as usize);
-
-        for i in found_idx..(count_used - 1) {
-            (*pmm_ptr).allocations[i] = (*pmm_ptr).allocations[i+1];
-        }
-        (*pmm_ptr).allocations[count_used - 1].used = false;
-    }
-}}
-
-unsafe fn is_overlap(start: u64, count: usize) -> bool { unsafe {
-    let end = start + (count as u64 * PAGE_SIZE);
-    let pmm_ptr = &raw mut PMM;
-
-    for i in 0..MAX_ALLOCS {
-        let alloc = &(*pmm_ptr).allocations[i];
-        if alloc.used {
-            let alloc_end = alloc.start + (alloc.count as u64 * PAGE_SIZE);
-            if start < alloc_end && end > alloc.start {
-                return true;
-            }
-        } else {
-            break;
-        }
-    }
-    false
-}}
-
-unsafe fn is_valid_ram(start: u64, count: usize) -> bool { unsafe {
-    let end = start + (count as u64 * PAGE_SIZE);
-    let mmap = (*(&raw mut BOOT_INFO)).mmap;
-
-    for i in 0..32 {
-        let entry = mmap.entries[i];
-        if entry.memory_type == 1 && entry.length > 0 {
-            let entry_end = entry.base + entry.length;
-            if start >= entry.base && end <= entry_end {
-                return true;
+        let mut count_used = 0;
+        for i in 0..MAX_ALLOCS {
+            if (*pmm_ptr).allocations[i].used {
+                count_used += 1;
             }
         }
-    }
-    false
-}}
 
-unsafe fn lock_pmm() { unsafe {
-    let pmm_ptr = &raw mut PMM;
-    while (*pmm_ptr).lock.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
-        core::hint::spin_loop();
-    }
-}}
+        if count_used >= MAX_ALLOCS {
+            return false;
+        }
 
-unsafe fn unlock_pmm() { unsafe {
-    let pmm_ptr = &raw mut PMM;
-    (*pmm_ptr).lock.store(false, Ordering::Release);
-}}
+        let mut idx = 0;
+        while idx < count_used {
+            if (*pmm_ptr).allocations[idx].start > start {
+                break;
+            }
+            idx += 1;
+        }
+
+        if idx < count_used {
+            for i in (idx..count_used).rev() {
+                (*pmm_ptr).allocations[i + 1] = (*pmm_ptr).allocations[i];
+            }
+        }
+
+        (*pmm_ptr).allocations[idx] = FrameAllocation {
+            pid,
+            start,
+            count,
+            used: true,
+        };
+
+        true
+    }
+}
+
+unsafe fn remove_allocation(start: u64) {
+    unsafe {
+        let pmm_ptr = &raw mut PMM;
+        let mut found_idx = MAX_ALLOCS;
+        let mut count_used = 0;
+
+        for i in 0..MAX_ALLOCS {
+            if (*pmm_ptr).allocations[i].used {
+                count_used += 1;
+                if (*pmm_ptr).allocations[i].start == start {
+                    found_idx = i;
+                }
+            } else {
+                break;
+            }
+        }
+
+        if found_idx != MAX_ALLOCS {
+            let start_addr = (*pmm_ptr).allocations[found_idx].start;
+            let size = (*pmm_ptr).allocations[found_idx].count as u64 * PAGE_SIZE;
+            core::ptr::write_bytes(start_addr as *mut u8, 0, size as usize);
+
+            for i in found_idx..(count_used - 1) {
+                (*pmm_ptr).allocations[i] = (*pmm_ptr).allocations[i + 1];
+            }
+            (*pmm_ptr).allocations[count_used - 1].used = false;
+        }
+    }
+}
+
+unsafe fn is_overlap(start: u64, count: usize) -> bool {
+    unsafe {
+        let end = start + (count as u64 * PAGE_SIZE);
+        let pmm_ptr = &raw mut PMM;
+
+        for i in 0..MAX_ALLOCS {
+            let alloc = &(*pmm_ptr).allocations[i];
+            if alloc.used {
+                let alloc_end = alloc.start + (alloc.count as u64 * PAGE_SIZE);
+                if start < alloc_end && end > alloc.start {
+                    return true;
+                }
+            } else {
+                break;
+            }
+        }
+        false
+    }
+}
+
+unsafe fn is_valid_ram(start: u64, count: usize) -> bool {
+    unsafe {
+        let end = start + (count as u64 * PAGE_SIZE);
+        let mmap = (*(&raw mut BOOT_INFO)).mmap;
+
+        for i in 0..32 {
+            let entry = mmap.entries[i];
+            if entry.memory_type == 1 && entry.length > 0 {
+                let entry_end = entry.base + entry.length;
+                if start >= entry.base && end <= entry_end {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+}
+
+unsafe fn lock_pmm() {
+    unsafe {
+        let pmm_ptr = &raw mut PMM;
+        while (*pmm_ptr).lock.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
+            core::hint::spin_loop();
+        }
+    }
+}
+
+unsafe fn unlock_pmm() {
+    unsafe {
+        let pmm_ptr = &raw mut PMM;
+        (*pmm_ptr).lock.store(false, Ordering::Release);
+    }
+}
 
 pub fn allocate_frame(pid: u64) -> Option<u64> {
     allocate_frames(1, pid)
@@ -288,8 +299,8 @@ pub fn free_frames_by_pid(pid: u64) {
             if (*pmm_ptr).allocations[i].used {
                 let alloc_pid = (*pmm_ptr).allocations[i].pid;
                 let alloc_main = alloc_pid >> 32;
-                
-                
+
+
                 let should_free = if target_child == 0 {
                     alloc_main == target_main
                 } else {
@@ -297,7 +308,6 @@ pub fn free_frames_by_pid(pid: u64) {
                 };
 
                 if should_free {
-                    
                     let start_addr = (*pmm_ptr).allocations[i].start;
                     let size = (*pmm_ptr).allocations[i].count as u64 * PAGE_SIZE;
                     core::ptr::write_bytes(start_addr as *mut u8, 0, size as usize);
@@ -311,11 +321,11 @@ pub fn free_frames_by_pid(pid: u64) {
                     };
 
                     for k in i..(count_used - 1) {
-                        (*pmm_ptr).allocations[k] = (*pmm_ptr).allocations[k+1];
+                        (*pmm_ptr).allocations[k] = (*pmm_ptr).allocations[k + 1];
                     }
                     (*pmm_ptr).allocations[count_used - 1].used = false;
 
-                    
+
                     continue;
                 }
             } else {
@@ -332,27 +342,27 @@ pub fn print_allocations() {
     unsafe {
         lock_pmm();
         let pmm_ptr = &raw mut PMM;
-        
+
         debugln!("--- PMM Allocations ---");
-        
+
         let mut count_used = 0;
         for i in 0..MAX_ALLOCS {
-             if (*pmm_ptr).allocations[i].used {
-                 count_used += 1;
-             } else {
-                 break;
-             }
+            if (*pmm_ptr).allocations[i].used {
+                count_used += 1;
+            } else {
+                break;
+            }
         }
-        
+
         for i in 0..count_used {
             let alloc = (*pmm_ptr).allocations[i];
             let start = alloc.start;
             let end = start + (alloc.count as u64 * PAGE_SIZE);
-            
+
             debugln!("PID {}: {:#x} -> {:#x} ({} pages)", alloc.pid, start, end, alloc.count);
-            
+
             if i > 0 {
-                let prev = (*pmm_ptr).allocations[i-1];
+                let prev = (*pmm_ptr).allocations[i - 1];
                 let prev_end = prev.start + (prev.count as u64 * PAGE_SIZE);
                 if start < prev_end {
                     debugln!("!!! COLLISION DETECTED with previous allocation !!!");
@@ -360,7 +370,7 @@ pub fn print_allocations() {
             }
         }
         debugln!("--- End of Allocations ---");
-        
+
         unlock_pmm();
     }
 }
@@ -388,7 +398,7 @@ pub fn get_memory_usage_by_pid(pid: u64) -> usize {
     unsafe {
         let pmm_ptr = &raw mut PMM;
         let mut total_pages = 0;
-        
+
         for i in 0..MAX_ALLOCS {
             if (*pmm_ptr).allocations[i].used {
                 if (*pmm_ptr).allocations[i].pid == pid {
@@ -398,7 +408,7 @@ pub fn get_memory_usage_by_pid(pid: u64) -> usize {
                 break;
             }
         }
-        
+
         total_pages * PAGE_SIZE as usize
     }
 }
