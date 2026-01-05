@@ -77,3 +77,69 @@ pub unsafe extern "C" fn atof(s: *const c_char) -> f64 {
 #[unsafe(no_mangle)] pub unsafe extern "C" fn system(_c: *const c_char) -> c_int { 0 }
 #[unsafe(no_mangle)] pub unsafe extern "C" fn exit(s: c_int) -> ! { std::os::exit(s as u64) }
 #[unsafe(no_mangle)] pub unsafe extern "C" fn getenv(_n: *const c_char) -> *mut c_char { core::ptr::null_mut() }
+#[unsafe(no_mangle)] pub unsafe extern "C" fn putenv(_string: *mut c_char) -> c_int { 0 }
+
+#[unsafe(no_mangle)] pub static mut optarg: *mut c_char = core::ptr::null_mut();
+#[unsafe(no_mangle)] pub static mut optind: c_int = 1;
+#[unsafe(no_mangle)] pub static mut opterr: c_int = 1;
+#[unsafe(no_mangle)] pub static mut optopt: c_int = 0;
+
+#[unsafe(no_mangle)] pub unsafe extern "C" fn getopt_long(_argc: c_int, _argv: *mut *mut c_char, _optstring: *const c_char, _longopts: *const c_void, _longindex: *mut c_int) -> c_int {
+    -1 
+}
+
+#[unsafe(no_mangle)] pub unsafe extern "C" fn mkstemps(_template: *mut c_char, _suffix_len: c_int) -> c_int { -1 }
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn realpath(path: *const c_char, resolved_path: *mut c_char) -> *mut c_char {
+    // Simplified: just copy path to resolved_path if provided, or malloc it.
+    let len = crate::string::strlen(path);
+    let res = if !resolved_path.is_null() {
+        resolved_path
+    } else {
+        crate::stdlib::malloc(len + 1) as *mut c_char
+    };
+    
+    if !res.is_null() {
+        crate::string::strcpy(res, path);
+    }
+    res
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn strtol(nptr: *const c_char, endptr: *mut *mut c_char, base: c_int) -> i64 {
+    let mut s = nptr;
+    let mut acc: i64 = 0;
+    let mut neg = false;
+
+    // Skip whitespace
+    while *s == 32 || (*s >= 9 && *s <= 13) { s = s.add(1); }
+
+    // Check sign
+    if *s == b'-' as c_char {
+        neg = true;
+        s = s.add(1);
+    } else if *s == b'+' as c_char {
+        s = s.add(1);
+    }
+
+    let b = if base == 0 { 10 } else { base as i64 };
+
+    loop {
+        let c = *s as u8;
+        let val;
+        if c >= b'0' && c <= b'9' { val = (c - b'0') as i64; }
+        else if c >= b'a' && c <= b'z' { val = (c - b'a' + 10) as i64; }
+        else if c >= b'A' && c <= b'Z' { val = (c - b'A' + 10) as i64; }
+        else { break; }
+
+        if val >= b { break; }
+
+        acc = acc * b + val;
+        s = s.add(1);
+    }
+
+    if !endptr.is_null() { *endptr = s as *mut c_char; }
+
+    if neg { -acc } else { acc }
+}

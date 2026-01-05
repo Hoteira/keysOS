@@ -68,6 +68,10 @@ impl File {
     pub fn as_raw_fd(&self) -> usize {
         self.fd
     }
+
+    pub fn from_raw_fd(fd: usize) -> Self {
+        File { fd }
+    }
 }
 
 impl Drop for File {

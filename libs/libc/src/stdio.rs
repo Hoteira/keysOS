@@ -103,6 +103,12 @@ pub unsafe extern "C" fn vfprintf(_st: *mut c_void, f: *const c_char, mut ap: Va
 #[unsafe(no_mangle)] pub unsafe extern "C" fn fflush(_s: *mut c_void) -> c_int { 0 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn fdopen(fd: c_int, _mode: *const c_char) -> *mut c_void {
+    let file = std::fs::File::from_raw_fd(fd as usize);
+    Box::into_raw(Box::new(file)) as *mut c_void
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn fopen(filename: *const c_char, _mode: *const c_char) -> *mut c_void {
     let path = core::str::from_utf8_unchecked(core::slice::from_raw_parts(filename as *const u8, strlen(filename)));
     if let Ok(file) = std::fs::File::open(path) { Box::into_raw(Box::new(file)) as *mut c_void }
@@ -114,6 +120,23 @@ pub unsafe extern "C" fn fopen(filename: *const c_char, _mode: *const c_char) ->
 #[unsafe(no_mangle)] pub unsafe extern "C" fn fwrite(p: *const c_void, s: usize, n: usize, st: *mut c_void) -> usize { if st.is_null() { return 0; } let f = &mut *(st as *mut std::fs::File); if let Ok(put) = f.write(core::slice::from_raw_parts(p as *const u8, s * n)) { put / s } else { 0 } }
 #[unsafe(no_mangle)] pub unsafe extern "C" fn fseek(st: *mut c_void, o: c_long, w: c_int) -> c_int { if st.is_null() { return -1; } let f = &mut *(st as *mut std::fs::File); if std::os::file_seek(f.as_raw_fd(), o as i64, w as usize) != u64::MAX { 0 } else { -1 } }
 #[unsafe(no_mangle)] pub unsafe extern "C" fn ftell(st: *mut c_void) -> c_long { if st.is_null() { return -1; } let f = &mut *(st as *mut std::fs::File); let r = std::os::file_seek(f.as_raw_fd(), 0, 1); if r != u64::MAX { r as c_long } else { -1 } }
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn getc(stream: *mut c_void) -> c_int {
+    if stream.is_null() { return -1; }
+    let f = &mut *(stream as *mut std::fs::File);
+    let mut buf = [0u8; 1];
+    if let Ok(n) = f.read(&mut buf) {
+        if n == 1 { buf[0] as c_int } else { -1 }
+    } else { -1 }
+}
+
+#[unsafe(no_mangle)] pub unsafe extern "C" fn ferror(_stream: *mut c_void) -> c_int { 0 }
+
+#[unsafe(no_mangle)] pub unsafe extern "C" fn putc(c: c_int, stream: *mut c_void) -> c_int {
+    let buf = [c as u8];
+    if fwrite(buf.as_ptr() as *const c_void, 1, 1, stream) == 1 { c } else { -1 }
+}
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn stat(path: *const c_char, buf: *mut c_void) -> c_int {

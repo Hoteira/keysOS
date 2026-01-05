@@ -184,3 +184,41 @@ pub unsafe extern "C" fn strdup(s: *const c_char) -> *mut c_char {
     if !ptr.is_null() { strcpy(ptr, s); }
     ptr
 }
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn strcasestr(haystack: *const c_char, needle: *const c_char) -> *mut c_char {
+    let mut h = haystack;
+    let n_len = strlen(needle);
+    if n_len == 0 { return haystack as *mut c_char; }
+    while *h != 0 {
+        if strncasecmp(h, needle, n_len) == 0 { return h as *mut c_char; }
+        h = h.add(1);
+    }
+    core::ptr::null_mut()
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn strpbrk(s: *const c_char, accept: *const c_char) -> *mut c_char {
+    let mut s_ptr = s;
+    while *s_ptr != 0 {
+        let mut a_ptr = accept;
+        while *a_ptr != 0 {
+            if *s_ptr == *a_ptr { return s_ptr as *mut c_char; }
+            a_ptr = a_ptr.add(1);
+        }
+        s_ptr = s_ptr.add(1);
+    }
+    core::ptr::null_mut()
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn strerror(_errnum: c_int) -> *mut c_char {
+    b"Unknown error\0".as_ptr() as *mut c_char
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn strcat(dest: *mut c_char, src: *const c_char) -> *mut c_char {
+    let dest_len = strlen(dest);
+    strcpy(dest.add(dest_len), src);
+    dest
+}

@@ -15,6 +15,7 @@ pub mod stdio;
 pub mod math;
 pub mod unistd;
 pub mod sys;
+pub mod curses;
 
 unsafe extern "C" {
     fn main(argc: c_int, argv: *mut *mut c_char) -> c_int;

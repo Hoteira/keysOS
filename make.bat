@@ -40,6 +40,9 @@ copy "target\bits64pie\release\taskbar" "tree\sys\bin\taskbar.elf"
 
 cargo build --package=libc --target=bits64pie.json --release
 
+ld.lld -pie --entry _start -o apps\nano-master\src\nano.elf apps\nano-master\src\*.o target\bits64pie\release\liblibc.a
+copy "apps\nano-master\src\nano.elf" "tree\apps\nano\nano.elf"
+
 cd apps\doomgeneric-master\doomgeneric
 clang -target x86_64-unknown-elf -ffreestanding -fno-stack-protector -fPIC -I ..\..\..\libs\libc\include -c *.c
 cd ..\..\..
