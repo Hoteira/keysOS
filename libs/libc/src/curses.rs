@@ -1,5 +1,7 @@
 use core::ffi::{c_char, c_int, c_void};
 
+pub type chtype = u32;
+
 // --- CTYPE / WCHAR stubs ---
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn iswalnum(c: u32) -> c_int {
@@ -20,28 +22,150 @@ pub unsafe extern "C" fn towlower(c: u32) -> u32 {
     if c >= 'A' as u32 && c <= 'Z' as u32 { c + 32 } else { c }
 }
 
-// --- NCURSES stubs ---
-// ...
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn newwin(_lines: c_int, _cols: c_int, _y: c_int, _x: c_int) -> *mut WINDOW { &raw mut STD_WIN }
+pub static mut COLS: c_int = 80;
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn delwin(_win: *mut WINDOW) -> c_int { 0 }
+pub static mut LINES: c_int = 25;
+
+#[repr(C)]
+pub struct WINDOW {
+    pub cury: c_int,
+    pub curx: c_int,
+    pub maxy: c_int,
+    pub maxx: c_int,
+    pub begy: c_int,
+    pub begx: c_int,
+    pub flags: c_int,
+    pub attrs: c_int,
+    pub bkgd: chtype,
+}
+
+#[unsafe(no_mangle)]
+pub static mut stdscr: *mut WINDOW = core::ptr::null_mut();
+#[unsafe(no_mangle)]
+pub static mut curscr: *mut WINDOW = core::ptr::null_mut();
+
+// --- NCURSES functions ---
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn initscr() -> *mut WINDOW { 
+    crate::stdio::krake_debug_printf(b"initscr() called\n\0".as_ptr() as *const c_char);
+    let mut ws = core::mem::zeroed::<crate::sys::winsize>();
+    if std::os::syscall(16, 0, 0x5413, &mut ws as *mut _ as u64) == 0 {
+        COLS = ws.ws_col as c_int;
+        LINES = ws.ws_row as c_int;
+    }
+    crate::stdio::krake_debug_printf(b"Terminal size: %d x %d\n\0".as_ptr() as *const c_char, COLS, LINES);
+    let win = newwin(LINES, COLS, 0, 0);
+    stdscr = win;
+    curscr = win;
+    win
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn endwin() -> c_int { 0 }
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn newwin(nlines: c_int, ncols: c_int, begin_y: c_int, begin_x: c_int) -> *mut WINDOW {
+    crate::stdio::krake_debug_printf(b"newwin(%d, %d, %d, %d) called\n\0".as_ptr() as *const c_char, nlines, ncols, begin_y, begin_x);
+    let ptr = crate::stdlib::malloc(core::mem::size_of::<WINDOW>()) as *mut WINDOW;
+    if !ptr.is_null() {
+        (*ptr).cury = 0;
+        (*ptr).curx = 0;
+        (*ptr).maxy = nlines;
+        (*ptr).maxx = ncols;
+        (*ptr).begy = begin_y;
+        (*ptr).begx = begin_x;
+        (*ptr).flags = 0;
+        (*ptr).attrs = 0;
+        (*ptr).bkgd = 0;
+    }
+    ptr
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn delwin(win: *mut WINDOW) -> c_int {
+    if !win.is_null() {
+        crate::stdlib::free(win as *mut c_void);
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn wmove(win: *mut WINDOW, y: c_int, x: c_int) -> c_int {
+    if win.is_null() { 
+        crate::stdio::krake_debug_printf(b"wmove(NULL, %d, %d) called!\n\0".as_ptr() as *const c_char, y, x);
+        return -1; 
+    }
+    (*win).cury = y;
+    (*win).curx = x;
+    
+    let abs_y = (*win).begy + y;
+    let abs_x = (*win).begx + x;
+    
+    let mut buf = [0u8; 32];
+    let mut pos = 0;
+    
+    // Manual ANSI Cup generation: \x1B[row;colH
+    buf[pos] = 0x1B; pos += 1;
+    buf[pos] = b'['; pos += 1;
+    
+    let mut row = abs_y + 1;
+    let mut row_digits = [0u8; 10];
+    let mut rd = 0;
+    if row == 0 { row_digits[rd] = b'0'; rd += 1; }
+    while row > 0 {
+        row_digits[rd] = (row % 10) as u8 + b'0';
+        row /= 10;
+        rd += 1;
+    }
+    while rd > 0 {
+        rd -= 1;
+        buf[pos] = row_digits[rd];
+        pos += 1;
+    }
+    
+    buf[pos] = b';'; pos += 1;
+    
+    let mut col = abs_x + 1;
+    let mut col_digits = [0u8; 10];
+    let mut cd = 0;
+    if col == 0 { col_digits[cd] = b'0'; cd += 1; }
+    while col > 0 {
+        col_digits[cd] = (col % 10) as u8 + b'0';
+        col /= 10;
+        cd += 1;
+    }
+    while cd > 0 {
+        cd -= 1;
+        buf[pos] = col_digits[cd];
+        pos += 1;
+    }
+    
+    buf[pos] = b'H'; pos += 1;
+    
+    let s = unsafe { core::str::from_utf8_unchecked(&buf[..pos]) };
+    std::os::print(s);
+    0
+}
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn wgetch(_win: *mut WINDOW) -> c_int {
-    // Read 1 byte from stdin (fd 0)
-    let mut buf = [0u8; 1];
-    let n = std::os::file_read(0, &mut buf);
-    if n == 1 { 
-        buf[0] as c_int 
-    } else {
+    loop {
+        let mut buf = [0u8; 1];
+        let n = std::os::file_read(0, &mut buf);
+        if n == 1 { 
+            crate::stdio::krake_debug_printf(b"wgetch() got: %d\n\0".as_ptr() as *const c_char, buf[0] as c_int);
+            return buf[0] as c_int;
+        } else if n == usize::MAX {
+            return -1;
+        }
         std::os::yield_task();
-        -1 
     }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn ungetch(_ch: c_int) -> c_int { 0 } // TODO: buffer it?
+pub unsafe extern "C" fn ungetch(_ch: c_int) -> c_int { 0 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn napms(ms: c_int) -> c_int {
@@ -53,24 +177,32 @@ pub unsafe extern "C" fn napms(ms: c_int) -> c_int {
 pub unsafe extern "C" fn wnoutrefresh(_win: *mut WINDOW) -> c_int { 0 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn wredrawln(_win: *mut WINDOW, _beg: c_int, _num: c_int) -> c_int { 0 }
+
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn wmove(_win: *mut WINDOW, y: c_int, x: c_int) -> c_int {
-    let s = alloc::format!("\x1B[{};{}H", y + 1, x + 1);
-    std::os::print(&s);
+pub unsafe extern "C" fn werase(win: *mut WINDOW) -> c_int {
+    if win.is_null() { return -1; }
+    crate::stdio::krake_debug_printf(b"werase(window at %d,%d, size %dx%d) called\n\0".as_ptr() as *const c_char, (*win).begx, (*win).begy, (*win).maxx, (*win).maxy);
+    
+    let spaces = b"                                                                                                                                "; // 128 spaces
+    
+    for y in 0..(*win).maxy {
+        wmove(win, y, 0);
+        let mut remaining = (*win).maxx as usize;
+        while remaining > 0 {
+            let to_write = core::cmp::min(remaining, spaces.len());
+            std::os::print(unsafe { core::str::from_utf8_unchecked(&spaces[..to_write]) });
+            remaining -= to_write;
+        }
+    }
+    wmove(win, 0, 0);
     0
 }
+
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn werase(_win: *mut WINDOW) -> c_int {
-    std::os::print("\x1B[2J"); // Clear screen
-    std::os::print("\x1B[H");  // Move to 1,1
-    0
+pub unsafe extern "C" fn wclear(win: *mut WINDOW) -> c_int {
+    werase(win)
 }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn wclear(_win: *mut WINDOW) -> c_int {
-    werase(_win)
-}
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn isendwin() -> c_int { 0 }
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn wclrtoeol(_win: *mut WINDOW) -> c_int {
     std::os::print("\x1B[K");
@@ -78,7 +210,67 @@ pub unsafe extern "C" fn wclrtoeol(_win: *mut WINDOW) -> c_int {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn mvwaddnstr(_win: *mut WINDOW, _y: c_int, _x: c_int, s: *const c_char, n: c_int) -> c_int {
+pub unsafe extern "C" fn isendwin() -> c_int { 0 }
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn curs_set(visibility: c_int) -> c_int { 
+    if visibility == 0 {
+        std::os::print("\x1B[?25l");
+    } else {
+        std::os::print("\x1B[?25h");
+    }
+    1
+}
+
+static mut WADDCH_COUNT: usize = 0;
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn waddch(win: *mut WINDOW, ch: u32) -> c_int {
+    let mut buf = [0u8; 4];
+    let char_code = ch & 0xFF; 
+    if char_code == 0 { return 0; }
+    if let Some(c) = char::from_u32(char_code) {
+        if WADDCH_COUNT < 100 {
+            crate::stdio::krake_debug_printf(b"waddch('%c')\n\0".as_ptr() as *const c_char, char_code);
+            WADDCH_COUNT += 1;
+        }
+        let s = c.encode_utf8(&mut buf);
+        std::os::print(s);
+        if !win.is_null() {
+            (*win).curx += 1; // Basic tracking
+        }
+    } else {
+        crate::stdio::krake_debug_printf(b"waddch invalid char: %u\n\0".as_ptr() as *const c_char, ch);
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn mvwaddch(win: *mut WINDOW, y: c_int, x: c_int, ch: u32) -> c_int {
+    wmove(win, y, x);
+    waddch(win, ch)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn waddstr(win: *mut WINDOW, s: *const c_char) -> c_int {
+    if s.is_null() { return -1; }
+    let cow = core::ffi::CStr::from_ptr(s).to_string_lossy();
+    std::os::print(&cow);
+    if !win.is_null() {
+        (*win).curx += cow.len() as c_int;
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn mvwaddstr(win: *mut WINDOW, y: c_int, x: c_int, s: *const c_char) -> c_int {
+    wmove(win, y, x);
+    waddstr(win, s)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn waddnstr(win: *mut WINDOW, s: *const c_char, n: c_int) -> c_int {
+    if s.is_null() { return -1; }
     let mut buf = alloc::vec::Vec::new();
     let mut i = 0;
     while i < n {
@@ -89,70 +281,48 @@ pub unsafe extern "C" fn mvwaddnstr(_win: *mut WINDOW, _y: c_int, _x: c_int, s: 
     }
     let s_str = core::str::from_utf8_unchecked(&buf);
     std::os::print(s_str);
-    0
-}
-
-// --- SIGNAL / SYS ---
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn sigaction(_sig: c_int, _act: *const c_void, _oact: *mut c_void) -> c_int { 0 }
-
-// --- LOCALE ---
-// Moved to locale.rs
-
-// --- STDLIB extra ---
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn wctomb(s: *mut c_char, wc: u32) -> c_int {
-    if s.is_null() { return 0; }
-    // Assume ASCII/UTF-8 single byte for now
-    *s = wc as u8 as c_char;
-    1
-}
-// Nano uses WINDOW* which is a pointer. We can just use dummy pointers.
-#[repr(C)]
-pub struct WINDOW {
-    _dummy: c_int,
-}
-static mut STD_WIN: WINDOW = WINDOW { _dummy: 0 };
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn initscr() -> *mut WINDOW { 
-    let mut ws = core::mem::zeroed::<crate::sys::winsize>();
-    if std::os::syscall(16, 0, 0x5413, &mut ws as *mut _ as u64) == 0 {
-        COLS = ws.ws_col as c_int;
-        LINES = ws.ws_row as c_int;
+    if !win.is_null() {
+        (*win).curx += i as c_int;
     }
-    &raw mut STD_WIN 
-}
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cbreak() -> c_int { 0 }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn noecho() -> c_int { 0 }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn nonl() -> c_int { 0 }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn intrflush(_win: *mut WINDOW, _bf: bool) -> c_int { 0 }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn keypad(_win: *mut WINDOW, _bf: bool) -> c_int { 0 }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn nodelay(_win: *mut WINDOW, _bf: bool) -> c_int { 0 }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn raw() -> c_int { 0 }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn beep() -> c_int {
-    // std::os::print("\x07"); // Beep
     0
 }
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn mvwaddnstr(win: *mut WINDOW, y: c_int, x: c_int, s: *const c_char, n: c_int) -> c_int {
+    wmove(win, y, x);
+    waddnstr(win, s, n)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn mvwprintw(win: *mut WINDOW, y: c_int, x: c_int, fmt: *const c_char, mut args: ...) -> c_int {
+    let mut buf = [0u8; 1024];
+    let n = crate::stdio::vsnprintf(buf.as_mut_ptr() as *mut c_char, 1024, fmt, args.as_va_list());
+    wmove(win, y, x);
+    let len = core::cmp::min(n as usize, 1023);
+    let s = core::str::from_utf8_unchecked(&buf[..len]);
+    std::os::print(s);
+    if !win.is_null() {
+        (*win).curx += len as c_int;
+    }
+    n
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn wattron(_win: *mut WINDOW, _attrs: c_int) -> c_int { 0 }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn wattroff(_win: *mut WINDOW, _attrs: c_int) -> c_int { 0 }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn scrollok(_win: *mut WINDOW, _bf: bool) -> c_int { 0 }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn wscrl(_win: *mut WINDOW, _n: c_int) -> c_int { 0 }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typeahead(_fd: c_int) -> c_int { 0 }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn beep() -> c_int { 0 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn doupdate() -> c_int { 0 }
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn curs_set(visibility: c_int) -> c_int { 
-    if visibility == 0 {
-        std::os::print("\x1B[?25l"); // Hide
-    } else {
-        std::os::print("\x1B[?25h"); // Show
-    }
-    1 // Previous state (dummy)
-}
+pub unsafe extern "C" fn wrefresh(_win: *mut WINDOW) -> c_int { 0 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn has_colors() -> bool { true }
@@ -164,37 +334,25 @@ pub unsafe extern "C" fn init_pair(_pair: c_int, _f: c_int, _b: c_int) -> c_int 
 pub unsafe extern "C" fn use_default_colors() -> c_int { 0 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn endwin() -> c_int { 0 }
+pub unsafe extern "C" fn intrflush(_win: *mut WINDOW, _bf: bool) -> c_int { 0 }
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn wrefresh(_win: *mut WINDOW) -> c_int {
-    // Flush stdout?
-    0
-}
+pub unsafe extern "C" fn keypad(_win: *mut WINDOW, _bf: bool) -> c_int { 0 }
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn waddch(_win: *mut WINDOW, ch: u32) -> c_int {
-    let mut buf = [0u8; 4];
-    // Strip attributes (everything above 0xFF for now, or handle specifically)
-    let char_code = ch & 0xFF; 
-    if let Some(c) = char::from_u32(char_code) {
-        let s = c.encode_utf8(&mut buf);
-        std::os::print(s);
-    }
-    0
-}
+pub unsafe extern "C" fn nodelay(_win: *mut WINDOW, _bf: bool) -> c_int { 0 }
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn mvwaddch(_win: *mut WINDOW, _y: c_int, _x: c_int, ch: u32) -> c_int {
-    // Move cursor then add ch
-    // std::os::print(format!("\x1B[{};{}H", y+1, x+1).as_str());
-    waddch(_win, ch)
-}
-// We might need more ncurses functions if we want it to work, but these are the ones linker complained about.
-
-// --- UNISTD / SYS stubs ---
-// Moved to unistd.rs
+pub unsafe extern "C" fn cbreak() -> c_int { 0 }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn noecho() -> c_int { 0 }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nonl() -> c_int { 0 }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn raw() -> c_int { 0 }
 
 // --- REGEX stubs ---
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn regcomp(_preg: *mut c_void, _regex: *const c_char, _cflags: c_int) -> c_int { 0 } // Success (fake)
+pub unsafe extern "C" fn regcomp(_preg: *mut c_void, _regex: *const c_char, _cflags: c_int) -> c_int { 0 }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn regexec(_preg: *const c_void, _string: *const c_char, _nmatch: usize, _pmatch: *mut c_void, _eflags: c_int) -> c_int { 1 } // No match
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn regerror(_errcode: c_int, _preg: *const c_void, _errbuf: *mut c_char, _errbuf_size: usize) -> usize { 
     if _errbuf_size > 0 {
@@ -208,77 +366,19 @@ pub unsafe extern "C" fn regerror(_errcode: c_int, _preg: *const c_void, _errbuf
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn regfree(_preg: *mut c_void) {}
 
-// ... (previous content) ...
-
+// --- MISC stubs ---
 #[unsafe(no_mangle)]
-pub static mut COLS: c_int = 80;
-#[unsafe(no_mangle)]
-pub static mut LINES: c_int = 25;
-#[unsafe(no_mangle)]
-pub static mut curscr: *mut WINDOW = unsafe { &raw mut STD_WIN };
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn wattron(_win: *mut WINDOW, _attrs: c_int) -> c_int { 0 }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn wattroff(_win: *mut WINDOW, _attrs: c_int) -> c_int { 0 }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn scrollok(_win: *mut WINDOW, _bf: bool) -> c_int { 0 }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn wscrl(_win: *mut WINDOW, _n: c_int) -> c_int { 0 }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn typeahead(_fd: c_int) -> c_int { 0 }
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn waddnstr(_win: *mut WINDOW, s: *const c_char, n: c_int) -> c_int {
-    // Like waddstr but max n chars
-    let mut buf = alloc::vec::Vec::new();
-    let mut i = 0;
-    while i < n {
-        let c = *s.add(i as usize);
-        if c == 0 { break; }
-        buf.push(c as u8);
-        i += 1;
-    }
-    let s_str = core::str::from_utf8_unchecked(&buf);
-    std::os::print(s_str);
-    0
+pub unsafe extern "C" fn wctomb(s: *mut c_char, wc: u32) -> c_int {
+    if s.is_null() { return 0; }
+    *s = wc as u8 as c_char;
+    1
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn mvwprintw(_win: *mut WINDOW, y: c_int, x: c_int, fmt: *const c_char, mut args: ...) -> c_int {
-    let mut buf = [0u8; 1024];
-    let n = crate::stdio::vsnprintf(buf.as_mut_ptr() as *mut c_char, 1024, fmt, args.as_va_list());
-    wmove(_win, y, x);
-    let len = core::cmp::min(n as usize, 1023);
-    let s = core::str::from_utf8_unchecked(&buf[..len]);
-    std::os::print(s);
-    n
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn mvwaddstr(_win: *mut WINDOW, y: c_int, x: c_int, s: *const c_char) -> c_int {
-    wmove(_win, y, x);
-    waddstr(_win, s)
-}
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn waddstr(_win: *mut WINDOW, s: *const c_char) -> c_int {
-    let cow = core::ffi::CStr::from_ptr(s).to_string_lossy();
-    std::os::print(&cow);
-    0
-}
+pub unsafe extern "C" fn sigaction(_sig: c_int, _act: *const c_void, _oact: *mut c_void) -> c_int { 0 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tgetstr(_id: *const c_char, _area: *mut *mut c_char) -> *mut c_char { core::ptr::null_mut() }
-
-// --- REGEX extra ---
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn regexec(_preg: *const c_void, _string: *const c_char, _nmatch: usize, _pmatch: *mut c_void, _eflags: c_int) -> c_int { 1 } // No match
-
-// --- PWD extra ---
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn getpwent() -> *mut c_void { core::ptr::null_mut() }
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn endpwent() {}
 
 // --- LIBGEN stubs ---
 #[unsafe(no_mangle)]
@@ -301,12 +401,11 @@ pub unsafe extern "C" fn dirname(path: *mut c_char) -> *mut c_char {
         }
         i -= 1;
     }
-    // If no slash, return "."
     if *path as u8 != b'/' {
         *path = b'.' as c_char;
         *path.add(1) = 0;
     } else {
-        *path.add(1) = 0; // Root /
+        *path.add(1) = 0; 
     }
     path
 }

@@ -8,11 +8,15 @@ struct Header {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn malloc(size: usize) -> *mut c_void {
+    if size == 0 { return core::ptr::null_mut(); }
     let header_size = core::mem::size_of::<Header>();
     let total = size + header_size;
     let layout = Layout::from_size_align(total, 16).unwrap();
     let ptr = alloc::alloc::alloc(layout);
-    if ptr.is_null() { return core::ptr::null_mut(); }
+    if ptr.is_null() { 
+        std::debugln!("malloc({}) FAILED!", size);
+        return core::ptr::null_mut(); 
+    }
     let header = ptr as *mut Header;
     (*header).size = size;
     ptr.add(header_size) as *mut c_void

@@ -50,6 +50,9 @@ impl TerminalBuffer {
     }
 
     fn write_char(&mut self, c: char) {
+        if self.cursor_row < 5 && self.cursor_col < 10 {
+             std::debugln!("[term] write_char('{}') at {},{}", c, self.cursor_row, self.cursor_col);
+        }
         self.ensure_row();
         let current = if self.is_alt { &mut self.alt_lines } else { &mut self.lines };
         let line = &mut current[self.cursor_row];
@@ -287,6 +290,7 @@ pub extern "C" fn main() -> i32 {
 
         let n = std::os::file_read(unsafe { TERM_READ_FD }, &mut pipe_buf);
         if n > 0 && n != usize::MAX {
+            std::debugln!("[term] Read {} bytes from pipe", n);
             let mut i = 0;
             let mut has_newline = false;
             while i < n {

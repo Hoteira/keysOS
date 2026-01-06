@@ -88,9 +88,8 @@ pub unsafe fn syscall6(num: u64, arg1: u64, arg2: u64, arg3: u64, arg4: u64, arg
 }
 
 pub fn print(s: &str) {
-    unsafe {
-        syscall(1, 1, s.as_ptr() as u64, s.len() as u64);
-    }
+    debug_print(s);
+    file_write(1, s.as_bytes());
 }
 
 pub fn debug_print(s: &str) {
@@ -129,9 +128,20 @@ pub fn file_read(fd: usize, buffer: &mut [u8]) -> usize {
 }
 
 pub fn file_write(fd: usize, buffer: &[u8]) -> usize {
-    unsafe {
-        syscall(1, fd as u64, buffer.as_ptr() as u64, buffer.len() as u64) as usize
+    let mut total_written = 0;
+    while total_written < buffer.len() {
+        let n = unsafe {
+            syscall(1, fd as u64, buffer[total_written..].as_ptr() as u64, (buffer.len() - total_written) as u64) as usize
+        };
+        if n == 0 || n == usize::MAX {
+            break;
+        }
+        total_written += n;
+        if total_written < buffer.len() {
+            yield_task();
+        }
     }
+    total_written
 }
 
 pub fn file_seek(fd: usize, offset: i64, whence: usize) -> u64 {

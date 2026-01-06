@@ -106,15 +106,21 @@ pub unsafe extern "C" fn printf(f: *const c_char, mut args: ...) -> c_int {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn fprintf(_s: *mut c_void, f: *const c_char, mut args: ...) -> c_int {
-    vfprintf(_s, f, args.as_va_list())
+pub unsafe extern "C" fn fprintf(s: *mut c_void, f: *const c_char, mut args: ...) -> c_int {
+    vfprintf(s, f, args.as_va_list())
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn vfprintf(_st: *mut c_void, f: *const c_char, mut ap: VaList) -> c_int {
+pub unsafe extern "C" fn vfprintf(st: *mut c_void, f: *const c_char, mut ap: VaList) -> c_int {
     printf_core(|b| {
         let buf = [b];
-        std::os::print(core::str::from_utf8_unchecked(&buf));
+        let s = core::str::from_utf8_unchecked(&buf);
+        std::os::debug_print(s);
+        if st.is_null() || st == (1 as *mut c_void) || st == (2 as *mut c_void) {
+            std::os::print(s);
+        } else {
+            fwrite(buf.as_ptr() as *const c_void, 1, 1, st);
+        }
     }, f, &mut ap)
 }
 
@@ -233,6 +239,11 @@ pub unsafe extern "C" fn remove(_p: *const c_char) -> c_int { 0 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn rename(_o: *const c_char, _n: *const c_char) -> c_int { 0 }
 
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn fputc(c: c_int, stream: *mut c_void) -> c_int {
+    putc(c, stream)
+}
 
 unsafe fn printf_core(mut output: impl FnMut(u8), fmt: *const c_char, args: &mut VaList) -> c_int {
     let mut p = fmt;
