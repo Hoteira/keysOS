@@ -456,7 +456,7 @@ fn execute_builtin(cmd: &str, args: &[String], cwd: &mut String, path_env: &mut 
                     let mut line = String::new();
                     line.push_str("  ");
                     if entry.file_type == std::fs::FileType::Directory {
-                        line.push_str("\x1B[1;94m\u{F07B} ");
+                        line.push_str("\x1B[1m\x1B[94m\u{F07B} ");
                         line.push_str(&entry.name);
                         line.push_str("/\x1B[0m\n");
                     } else {

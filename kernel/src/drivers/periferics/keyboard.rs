@@ -78,6 +78,7 @@ static mut SHIFT_ACTIVE: bool = false;
 static mut E0_ACTIVE: bool = false;
 static mut SUPER_ACTIVE: bool = false;
 static mut ALT_ACTIVE: bool = false;
+static mut CTRL_ACTIVE: bool = false;
 
 pub fn is_super_active() -> bool {
     unsafe { SUPER_ACTIVE }
@@ -194,6 +195,7 @@ pub fn handle_scancode(scancode: u8) -> Option<(u32, bool)> {
             }
 
             0x1D => {
+                CTRL_ACTIVE = pressed;
                 Some((KEY_CTRL, pressed))
             }
 
@@ -222,13 +224,22 @@ pub fn handle_scancode(scancode: u8) -> Option<(u32, bool)> {
             0x2B..=0x35 |
             0x3A => {
                 if scancode_val < 128 {
-                    let c = if ALT_ACTIVE {
+                    let mut c = if ALT_ACTIVE {
                         SCANCODE_MAP_ALT[scancode_val as usize]
                     } else if SHIFT_ACTIVE {
                         SCANCODE_MAP_UPPERCASE[scancode_val as usize]
                     } else {
                         SCANCODE_MAP_LOWERCASE[scancode_val as usize]
                     };
+
+                    if CTRL_ACTIVE {
+                        if c >= 'a' && c <= 'z' {
+                            c = ((c as u8) - b'a' + 1) as char;
+                        } else if c >= 'A' && c <= 'Z' {
+                            c = ((c as u8) - b'A' + 1) as char;
+                        }
+                    }
+
                     if c != '\0' { Some((c as u32, pressed)) } else { None }
                 } else {
                     None

@@ -248,72 +248,120 @@ struct TextSegment {
     start: usize,
     end: usize,
     color: Color,
+    bg_color: Color,
     size: f32,
 }
 
 fn parse_ansi_text(text: &str, default_color: Color, default_size: f32) -> (Vec<TextSegment>, alloc::string::String) {
     let mut segments: Vec<TextSegment> = Vec::new();
     let mut clean_text = alloc::string::String::new();
-    let mut current_color = default_color;
+    
+    let mut current_fg = default_color;
+    let mut current_bg = Color::rgba(0, 0, 0, 0);
     let current_size = default_size;
+    let mut is_bold = false;
+    let mut is_inverse = false;
 
     let mut chars = text.chars().peekable();
     let mut clean_pos = 0;
 
     while let Some(c) = chars.next() {
         if c == '\x1B' && chars.peek() == Some(&'[') {
-            chars.next();
+            chars.next(); // Consume '['
 
             let mut params_str = alloc::string::String::new();
-            let mut valid_seq = false;
-
-            while let Some(&tc) = chars.peek() {
-                chars.next();
-                if tc == 'm' {
-                    valid_seq = true;
+            
+            // Consume Parameter and Intermediate bytes (0x20-0x3F)
+            while let Some(&p) = chars.peek() {
+                if p >= '\x20' && p <= '\x3F' {
+                    chars.next();
+                    params_str.push(p);
+                } else {
                     break;
                 }
-                if !tc.is_digit(10) && tc != ';' {
-                    break;
-                }
-                params_str.push(tc);
             }
 
-            if valid_seq {
-                if params_str.is_empty() {
-                    current_color = default_color;
+            // Consume Final byte (0x40-0x7E)
+            let mut final_char = '\0';
+            if let Some(&f) = chars.peek() {
+                if f >= '\x40' && f <= '\x7E' {
+                    chars.next();
+                    final_char = f;
+                }
+            }
+
+            // Process SGR (Select Graphic Rendition) -> 'm'
+            if final_char == 'm' {
+                let parts: Vec<&str> = params_str.split(';').collect();
+                
+                // If empty "m", it's a reset
+                if parts.len() == 1 && parts[0].is_empty() {
+                    current_fg = default_color;
+                    current_bg = Color::rgba(0, 0, 0, 0);
+                    is_bold = false;
+                    is_inverse = false;
                 } else {
-                    let parts: Vec<&str> = params_str.split(';').collect();
                     let mut i = 0;
                     while i < parts.len() {
-                        if let Ok(code) = parts[i].parse::<u8>() {
+                        let part = parts[i].trim_start_matches('?'); 
+                        
+                        if let Ok(code) = part.parse::<u8>() {
                             match code {
-                                0 => current_color = default_color,
-                                30 => current_color = Color::rgb(0, 0, 0),
-                                31 => current_color = Color::rgb(170, 0, 0),
-                                32 => current_color = Color::rgb(0, 170, 0),
-                                33 => current_color = Color::rgb(170, 85, 0),
-                                34 => current_color = Color::rgb(0, 0, 170),
-                                35 => current_color = Color::rgb(170, 0, 170),
-                                36 => current_color = Color::rgb(0, 170, 170),
-                                37 => current_color = Color::rgb(170, 170, 170),
-                                90 => current_color = Color::rgb(85, 85, 85),
-                                91 => current_color = Color::rgb(255, 85, 85),
-                                92 => current_color = Color::rgb(85, 255, 85),
-                                93 => current_color = Color::rgb(255, 255, 85),
-                                94 => current_color = Color::rgb(85, 85, 255),
-                                95 => current_color = Color::rgb(255, 85, 255),
-                                96 => current_color = Color::rgb(85, 255, 255),
-                                97 => current_color = Color::rgb(255, 255, 255),
-                                38 => {
+                                0 => {
+                                    current_fg = default_color;
+                                    current_bg = Color::rgba(0, 0, 0, 0);
+                                    is_bold = false;
+                                    is_inverse = false;
+                                }
+                                1 => is_bold = true,
+                                7 => is_inverse = true,
+                                27 => is_inverse = false,
+                                39 => current_fg = default_color,
+                                49 => current_bg = Color::rgba(0, 0, 0, 0),
+                                
+                                30..=37 => { // FG
+                                    let idx = code - 30;
+                                    let colors = [
+                                        Color::rgb(0,0,0), Color::rgb(170,0,0), Color::rgb(0,170,0), Color::rgb(170,85,0),
+                                        Color::rgb(0,0,170), Color::rgb(170,0,170), Color::rgb(0,170,170), Color::rgb(170,170,170)
+                                    ];
+                                    current_fg = colors[idx as usize];
+                                }
+                                90..=97 => { // Bright FG
+                                    let idx = code - 90;
+                                    let colors = [
+                                        Color::rgb(85,85,85), Color::rgb(255,85,85), Color::rgb(85,255,85), Color::rgb(255,255,85),
+                                        Color::rgb(85,85,255), Color::rgb(255,85,255), Color::rgb(85,255,255), Color::rgb(255,255,255)
+                                    ];
+                                    current_fg = colors[idx as usize];
+                                }
+                                40..=47 => { // BG
+                                    let idx = code - 40;
+                                    let colors = [
+                                        Color::rgb(0,0,0), Color::rgb(170,0,0), Color::rgb(0,170,0), Color::rgb(170,85,0),
+                                        Color::rgb(0,0,170), Color::rgb(170,0,170), Color::rgb(0,170,170), Color::rgb(170,170,170)
+                                    ];
+                                    current_bg = colors[idx as usize];
+                                }
+                                100..=107 => { // Bright BG
+                                    let idx = code - 100;
+                                    let colors = [
+                                        Color::rgb(85,85,85), Color::rgb(255,85,85), Color::rgb(85,255,85), Color::rgb(255,255,85),
+                                        Color::rgb(85,85,255), Color::rgb(255,85,255), Color::rgb(85,255,255), Color::rgb(255,255,255)
+                                    ];
+                                    current_bg = colors[idx as usize];
+                                }
+                                38 | 48 => { // 256/RGB
+                                    let is_bg = code == 48;
                                     if i + 1 < parts.len() {
-                                        if parts[i + 1] == "2" && i + 4 < parts.len() {
-                                            let r = parts[i + 2].parse::<u8>().unwrap_or(0);
-                                            let g = parts[i + 3].parse::<u8>().unwrap_or(0);
-                                            let b = parts[i + 4].parse::<u8>().unwrap_or(0);
-                                            current_color = Color::rgb(r, g, b);
+                                        if parts[i+1] == "2" && i + 4 < parts.len() {
+                                            let r = parts[i+2].parse::<u8>().unwrap_or(0);
+                                            let g = parts[i+3].parse::<u8>().unwrap_or(0);
+                                            let b = parts[i+4].parse::<u8>().unwrap_or(0);
+                                            let c = Color::rgb(r,g,b);
+                                            if is_bg { current_bg = c; } else { current_fg = c; }
                                             i += 4;
-                                        } else if parts[i + 1] == "5" && i + 2 < parts.len() {
+                                        } else if parts[i+1] == "5" && i + 2 < parts.len() {
                                             i += 2;
                                         }
                                     }
@@ -326,12 +374,32 @@ fn parse_ansi_text(text: &str, default_color: Color, default_size: f32) -> (Vec<
                 }
             }
         } else {
+            if c == '\x1B' { continue; } // Ignore stray ESC
+
             let start = clean_pos;
             clean_text.push(c);
             clean_pos += 1;
 
+            let mut eff_fg = current_fg;
+            let mut eff_bg = current_bg;
+
+            if is_bold {
+                if eff_fg.r < 128 && eff_fg.g < 128 && eff_fg.b < 128 {
+                     eff_fg.r = eff_fg.r.saturating_add(85);
+                     eff_fg.g = eff_fg.g.saturating_add(85);
+                     eff_fg.b = eff_fg.b.saturating_add(85);
+                }
+            }
+
+            if is_inverse {
+                let tmp = eff_fg;
+                eff_fg = if eff_bg.a == 0 { default_color } else { eff_bg };
+                eff_bg = tmp;
+                eff_bg.a = 255; 
+            }
+
             if let Some(last) = segments.last_mut() {
-                if last.color == current_color && last.size == current_size && last.end == start {
+                if last.color == eff_fg && last.bg_color == eff_bg && last.size == current_size && last.end == start {
                     last.end += 1;
                     continue;
                 }
@@ -340,7 +408,8 @@ fn parse_ansi_text(text: &str, default_color: Color, default_size: f32) -> (Vec<
             segments.push(TextSegment {
                 start,
                 end: clean_pos,
-                color: current_color,
+                color: eff_fg,
+                bg_color: eff_bg,
                 size: current_size,
             });
         }
@@ -389,6 +458,7 @@ pub fn draw_text_formatted(
                 start: 0,
                 end: clean_text.len(),
                 color: default_color,
+                bg_color: Color::rgba(0,0,0,0),
                 size: default_size,
             });
 
@@ -422,9 +492,42 @@ pub fn draw_text_formatted(
         }
 
         let glyph_y_start = (current_baseline_isize + metrics.base_line as isize) as isize;
-
-
         let glyph_x = (current_x as isize + metrics.left_side_bearing) as usize;
+
+        // Draw Background if opaque
+        if segment.bg_color.a > 0 {
+            // Calculate background rect for this char. 
+            // We use advance_width for width, and current_line_height for height.
+            // Centered vertically around the text? Or fill the line?
+            // Usually terminal emulators fill the line height.
+            // Here we approximate using font metrics.
+            
+            let bg_x = current_x;
+            let bg_w = metrics.advance_width;
+            let bg_y_isize = current_baseline_isize; // Top of line approx? 
+            // current_baseline_isize is the TOP of the line in this layout logic (see start_y_isize initialization)
+            
+            let bg_h = current_line_height;
+            
+            // Draw rectangle
+            if bg_y_isize + (bg_h as isize) >= clip_y as isize && bg_y_isize <= limit_y as isize {
+                 for r in 0..bg_h {
+                     let dy = (bg_y_isize + r as isize);
+                     if dy < clip_y as isize { continue; }
+                     let udy = dy as usize;
+                     if max_height > 0 && udy >= clip_y + max_height { break; }
+                     if udy >= buffer.len() / buffer_width { break; }
+                     
+                     for cx in 0..bg_w {
+                         let dx = bg_x + cx;
+                         if dx >= buffer_width { break; }
+                         if max_width > 0 && dx >= x + max_width { break; }
+                         
+                         draw_pixel(buffer, buffer_width, dx, udy, segment.bg_color);
+                     }
+                 }
+            }
+        }
 
         if glyph_y_start + (metrics.height as isize) >= clip_y as isize && glyph_y_start <= limit_y as isize {
             for row in 0..metrics.height {

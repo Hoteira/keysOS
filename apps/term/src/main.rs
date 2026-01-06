@@ -4,20 +4,41 @@
 extern crate alloc;
 use alloc::format;
 use alloc::string::String;
+use alloc::string::ToString;
 use alloc::vec::Vec;
 use inkui::{Color, Size, Widget, Window};
+use std::debugln;
 use std::fs::File;
 
 static mut TERM_READ_FD: usize = 0;
 static mut TERM_WRITE_FD: usize = 0;
 
+#[derive(Clone, Copy, PartialEq)]
+struct Cell {
+    c: char,
+    fg: u8,   // 0-255, 255 = Default
+    bg: u8,   // 0-255, 255 = Default
+    bold: bool,
+}
+
+impl Cell {
+    fn default() -> Self {
+        Self { c: ' ', fg: 255, bg: 255, bold: false }
+    }
+}
+
 struct TerminalBuffer {
-    lines: Vec<Vec<char>>,
-    alt_lines: Vec<Vec<char>>,
+    lines: Vec<Vec<Cell>>,
+    alt_lines: Vec<Vec<Cell>>,
     is_alt: bool,
     cursor_row: usize,
     cursor_col: usize,
     cursor_visible: bool,
+
+    // Current SGR state
+    current_fg: u8,
+    current_bg: u8,
+    current_bold: bool,
 }
 
 impl TerminalBuffer {
@@ -29,6 +50,9 @@ impl TerminalBuffer {
             cursor_row: 0,
             cursor_col: 0,
             cursor_visible: true,
+            current_fg: 255,
+            current_bg: 255,
+            current_bold: false,
         }
     }
 
@@ -50,28 +74,32 @@ impl TerminalBuffer {
     }
 
     fn write_char(&mut self, c: char) {
-        /*
-        if self.cursor_row < 5 && self.cursor_col < 10 {
-             std::debugln!("[term] write_char('{}') at {},{}", c, self.cursor_row, self.cursor_col);
-        }
-        */
         self.ensure_row();
         let current = if self.is_alt { &mut self.alt_lines } else { &mut self.lines };
         let line = &mut current[self.cursor_row];
         
         while line.len() <= self.cursor_col {
-            line.push(' ');
+            line.push(Cell::default());
         }
-        line[self.cursor_col] = c;
+        
+        let cell = Cell {
+            c,
+            fg: self.current_fg,
+            bg: self.current_bg,
+            bold: self.current_bold,
+        };
+
+        if self.cursor_col < line.len() {
+            line[self.cursor_col] = cell;
+        } else {
+            line.push(cell);
+        }
         self.cursor_col += 1;
     }
 
     fn write_str(&mut self, s: &str) {
         for c in s.chars() {
-            if c == '\x1B' {
-                // Should not happen if filtered correctly
-                continue;
-            }
+            if c == '\x1B' { continue; }
             self.write_char(c);
         }
     }
@@ -94,21 +122,95 @@ impl TerminalBuffer {
         }
     }
 
-    fn render(&self) -> String {
-        let current = if self.is_alt { &self.alt_lines } else { &self.lines };
-
-        let mut s = String::new();
-        for (i, line) in current.iter().enumerate() {
-            if i > 0 { s.push('\n'); }
-            for &c in line {
-                s.push(c);
-            }
+    fn handle_sgr(&mut self, params: &str) {
+        if params.is_empty() {
+            self.current_fg = 255;
+            self.current_bg = 255;
+            self.current_bold = false;
+            return;
         }
 
-        if self.cursor_visible {
-            // Placeholder for cursor position if we had one in the string
-            // But label widget renders everything. 
-            // We'll just stick to the simple render for now.
+        let parts = params.split(';');
+        for part in parts {
+            let n = part.parse::<u8>().unwrap_or(0);
+            match n {
+                0 => { self.current_fg = 255; self.current_bg = 255; self.current_bold = false; }
+                1 => self.current_bold = true,
+                22 => self.current_bold = false,
+                30..=37 => self.current_fg = n - 30,
+                39 => self.current_fg = 255,
+                40..=47 => self.current_bg = n - 40,
+                49 => self.current_bg = 255,
+                90..=97 => self.current_fg = n - 90 + 8,
+                100..=107 => self.current_bg = n - 100 + 8,
+                _ => {} // Ignore unsupported for now
+            }
+        }
+    }
+
+    fn render(&self) -> String {
+        let current = if self.is_alt { &self.alt_lines } else { &self.lines };
+        let mut s = String::new();
+        
+        let mut last_fg = 255;
+        let mut last_bg = 255;
+        let mut last_bold = false;
+
+        // Reset at start
+        s.push_str("\x1B[0m");
+
+        for (i, line) in current.iter().enumerate() {
+            if i > 0 { 
+                s.push('\n'); 
+                // Reset style at start of line? Not strictly necessary but safe.
+                // Actually optimized render keeps state. 
+            }
+            
+            for cell in line {
+                // Update Bold
+                if cell.bold != last_bold {
+                    if cell.bold {
+                        s.push_str("\x1B[1m");
+                    } else {
+                        s.push_str("\x1B[22m"); // Normal intensity
+                    }
+                    last_bold = cell.bold;
+                }
+
+                // Update FG
+                if cell.fg != last_fg {
+                    if cell.fg == 255 {
+                        s.push_str("\x1B[39m");
+                    } else if cell.fg < 8 {
+                        s.push_str("\x1B[");
+                        s.push_str(&(30 + cell.fg).to_string());
+                        s.push('m');
+                    } else if cell.fg < 16 {
+                        s.push_str("\x1B[");
+                        s.push_str(&(90 + cell.fg - 8).to_string());
+                        s.push('m');
+                    }
+                    last_fg = cell.fg;
+                }
+
+                // Update BG
+                if cell.bg != last_bg {
+                    if cell.bg == 255 {
+                        s.push_str("\x1B[49m");
+                    } else if cell.bg < 8 {
+                        s.push_str("\x1B[");
+                        s.push_str(&(40 + cell.bg).to_string());
+                        s.push('m');
+                    } else if cell.bg < 16 {
+                        s.push_str("\x1B[");
+                        s.push_str(&(100 + cell.bg - 8).to_string());
+                        s.push('m');
+                    }
+                    last_bg = cell.bg;
+                }
+
+                s.push(cell.c);
+            }
         }
         s
     }
@@ -131,11 +233,11 @@ impl TerminalBuffer {
 fn update_term_size(win: &Window) {
     if let Some(widget) = win.find_widget_by_id(2) {
         if let inkui::widget::Widget::Label { text, geometry, .. } = widget {
-            let padding = 10;
-            let width = geometry.width.saturating_sub(padding * 2);
-            let height = geometry.height.saturating_sub(padding * 2);
+            let width = geometry.width.saturating_sub(geometry.width * 4 / 100);
+            let height = geometry.height.saturating_sub(geometry.height * 4 / 100);
 
-                                            let char_width = (text.size as f32 * 1.0) as usize;            let line_height = (text.size as f32 * 1.2) as usize;
+            let char_width = (text.size as f32 * 0.8) as usize;
+            let line_height = (text.size as f32 * 1.5) as usize;
 
             if char_width > 0 && line_height > 0 {
                 let cols = (width / char_width) as u16;
@@ -160,16 +262,18 @@ pub extern "C" fn main() -> i32 {
     let height = 400;
 
     // Manually calculate and set initial terminal size so spawned shell inherits it
-    let avail_w = width - (width * 4 / 100);
-    let avail_h = height - (height * 5 / 100);
-    let font_size = 12.0f32;
-    let char_w = (font_size * 0.8) as usize;
-    let line_h = (font_size * 1.5) as usize;
+    let font_size = 14.0f32;
+    let char_w = (font_size * 0.7) as usize;
+    let line_h = (font_size * 1.3) as usize;
+
+    // Calculate available space assuming padding of 10 on each side (20 total)
+    let avail_w = (width - width * 4 / 100) as f32;
+    let avail_h = (height - height * 5 / 100) as f32;
 
     if char_w > 0 && line_h > 0 {
-        let cols = (avail_w / char_w) as u16;
-        let rows = (avail_h / line_h) as u16;
-        let rows = rows.saturating_sub(1); // Subtract 1 row to account for extra margin in scroll logic
+        let cols = (avail_w / char_w as f32) as u16;
+        let rows = (avail_h / line_h as f32) as u16;
+        let rows = rows.saturating_sub(1); // Subtract 1 row safety margin
 
         let ws = std::os::WinSize {
             ws_row: rows,
@@ -286,7 +390,8 @@ pub extern "C" fn main() -> i32 {
                     }
                 }
                 Event::Mouse(e) => {
-                    if e.scroll != 0 {
+                    debugln!("IS_ALT: {}", term_buffer.is_alt);
+                    if e.scroll != 0 && !term_buffer.is_alt { // BLOCK SCROLL IN RAW MODE
                         if let Some(widget) = win.find_widget_by_id_mut(2) {
                             widget.handle_scroll(e.scroll);
                             win.draw();
@@ -315,7 +420,6 @@ pub extern "C" fn main() -> i32 {
             let mut i = 0;
             let mut has_newline = false;
             while i < n {
-                // ... (processing loop remains unchanged) ...
                 let b = pipe_buf[i];
                 if b == 0x08 {
                     term_buffer.backspace();
@@ -401,7 +505,7 @@ pub extern "C" fn main() -> i32 {
                                         let current = if term_buffer.is_alt { &mut term_buffer.alt_lines } else { &mut term_buffer.lines };
                                         if term_buffer.cursor_row < current.len() {
                                             for i in 0..core::cmp::min(term_buffer.cursor_col + 1, current[term_buffer.cursor_row].len()) {
-                                                current[term_buffer.cursor_row][i] = ' ';
+                                                current[term_buffer.cursor_row][i] = Cell::default();
                                             }
                                         }
                                     } else if seq == b"2" { // Whole line
@@ -414,8 +518,8 @@ pub extern "C" fn main() -> i32 {
                                     }
                                 }
                                 b'm' => {
-                                    let seq_full = unsafe { core::str::from_utf8_unchecked(&pipe_buf[i..j + 1]) };
-                                    term_buffer.write_str(seq_full);
+                                    let params = unsafe { core::str::from_utf8_unchecked(seq) };
+                                    term_buffer.handle_sgr(params);
                                 }
                                 b'h' => {
                                     if seq.len() > 1 && seq[0] == b'?' {
@@ -493,7 +597,7 @@ pub extern "C" fn main() -> i32 {
                         let height = geometry.height.saturating_sub(padding * 2);
 
                         if width > 0 {
-                                                            let char_width = (text.size as f32 * 1.0) as usize;                            if char_width > 0 {
+                                                            let char_width = (text.size as f32 * 0.8) as usize;                            if char_width > 0 {
                                 let chars_per_line = width / char_width;
                                 let mut visual_lines = 0;
 

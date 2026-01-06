@@ -50,7 +50,7 @@ impl AppState {
         std::os::file_write(STDOUT_FD, b"\x1B[2J\x1B[H");
 
 
-        let header = format!("\x1B[1;37;44m TMAP - {}\x1B[0m\n\n", self.current_path);
+        let header = format!("\x1B[1m\x1B[37m\x1B[44m TMAP - {}\x1B[0m\n\n", self.current_path);
         std::os::file_write(STDOUT_FD, header.as_bytes());
 
 
@@ -62,7 +62,7 @@ impl AppState {
             }
 
             if entry.file_type == fs::FileType::Directory {
-                std::os::file_write(STDOUT_FD, "\x1B[1;94m\u{F07B} ".as_bytes());
+                std::os::file_write(STDOUT_FD, "\x1B[1m\x1B[94m\u{F07B} ".as_bytes());
             } else {
                 std::os::file_write(STDOUT_FD, "\x1B[37m\u{F016} ".as_bytes());
             }
