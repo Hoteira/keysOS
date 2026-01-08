@@ -18,6 +18,7 @@ pub static mut COMMON_CFG_ADDR: u64 = 0;
 
 static mut GPU_CMD_VIRT: u64 = 0;
 static mut GPU_CMD_PHYS: u64 = 0;
+static mut REQ_IDX: usize = 0;
 
 pub fn init() {
     let virtio_opt = crate::drivers::pci::find_device(0x1AF4, 0x1050);
@@ -265,9 +266,11 @@ pub fn start_gpu(width: u32, height: u32, phys_buf1: u64, phys_buf2: u64) {
 
 pub fn transfer_and_flush(resource_id: u32, width: u32, height: u32) {
     unsafe {
-        
-        let req_transfer_ptr = GPU_CMD_VIRT as *mut VirtioGpuTransferToHost2d;
-        let req_transfer_phys = GPU_CMD_PHYS;
+        let idx = REQ_IDX % 32;
+        REQ_IDX += 1;
+
+        let req_transfer_ptr = (GPU_CMD_VIRT + (idx as u64 * 64)) as *mut VirtioGpuTransferToHost2d;
+        let req_transfer_phys = GPU_CMD_PHYS + (idx as u64 * 64);
 
         core::ptr::write(req_transfer_ptr, VirtioGpuTransferToHost2d {
             hdr: VirtioGpuCtrlHeader { type_: VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D, flags: 0, fence_id: 0, ctx_id: 0, ring_idx: 0, padding: [0; 3] },
@@ -276,10 +279,10 @@ pub fn transfer_and_flush(resource_id: u32, width: u32, height: u32) {
             resource_id,
             padding: 0,
         });
-        send_command_queue(0, &[req_transfer_phys], &[core::mem::size_of::<VirtioGpuTransferToHost2d>() as u32], &[], &[], true);
+        send_command_queue(0, &[req_transfer_phys], &[core::mem::size_of::<VirtioGpuTransferToHost2d>() as u32], &[], &[], false);
 
-        let req_flush_ptr = (GPU_CMD_VIRT + 512) as *mut VirtioGpuResourceFlush;
-        let req_flush_phys = GPU_CMD_PHYS + 512;
+        let req_flush_ptr = (GPU_CMD_VIRT + 2048 + (idx as u64 * 64)) as *mut VirtioGpuResourceFlush;
+        let req_flush_phys = GPU_CMD_PHYS + 2048 + (idx as u64 * 64);
 
         core::ptr::write(req_flush_ptr, VirtioGpuResourceFlush {
             hdr: VirtioGpuCtrlHeader { type_: VIRTIO_GPU_CMD_RESOURCE_FLUSH, flags: 0, fence_id: 0, ctx_id: 0, ring_idx: 0, padding: [0; 3] },
@@ -293,19 +296,21 @@ pub fn transfer_and_flush(resource_id: u32, width: u32, height: u32) {
 pub fn flush(x: u32, y: u32, width: u32, height: u32, screen_width: u32, resource_id: u32) {
     let offset = (y as u64 * screen_width as u64 + x as u64) * 4;
     unsafe {
-        
-        let req_transfer_ptr = GPU_CMD_VIRT as *mut VirtioGpuTransferToHost2d;
-        let req_transfer_phys = GPU_CMD_PHYS;
+        let idx = REQ_IDX % 32;
+        REQ_IDX += 1;
+
+        let req_transfer_ptr = (GPU_CMD_VIRT + (idx as u64 * 64)) as *mut VirtioGpuTransferToHost2d;
+        let req_transfer_phys = GPU_CMD_PHYS + (idx as u64 * 64);
 
         core::ptr::write(req_transfer_ptr, VirtioGpuTransferToHost2d {
             hdr: VirtioGpuCtrlHeader { type_: VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D, flags: 0, fence_id: 0, ctx_id: 0, ring_idx: 0, padding: [0; 3] },
             r: VirtioGpuRect { x, y, width, height },
             offset, resource_id, padding: 0,
         });
-        send_command_queue(0, &[req_transfer_phys], &[core::mem::size_of::<VirtioGpuTransferToHost2d>() as u32], &[], &[], true);
+        send_command_queue(0, &[req_transfer_phys], &[core::mem::size_of::<VirtioGpuTransferToHost2d>() as u32], &[], &[], false);
 
-        let req_flush_ptr = (GPU_CMD_VIRT + 512) as *mut VirtioGpuResourceFlush;
-        let req_flush_phys = GPU_CMD_PHYS + 512;
+        let req_flush_ptr = (GPU_CMD_VIRT + 2048 + (idx as u64 * 64)) as *mut VirtioGpuResourceFlush;
+        let req_flush_phys = GPU_CMD_PHYS + 2048 + (idx as u64 * 64);
 
         core::ptr::write(req_flush_ptr, VirtioGpuResourceFlush {
             hdr: VirtioGpuCtrlHeader { type_: VIRTIO_GPU_CMD_RESOURCE_FLUSH, flags: 0, fence_id: 0, ctx_id: 0, ring_idx: 0, padding: [0; 3] },

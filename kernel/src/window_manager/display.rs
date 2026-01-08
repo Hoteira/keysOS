@@ -63,9 +63,8 @@ impl DisplayServer {
                 let b1 = crate::memory::pmm::allocate_frames(pages, 0).expect("Failed to allocate buffer 1");
                 let b2 = crate::memory::pmm::allocate_frames(pages, 0).expect("Failed to allocate buffer 2");
 
-                
-                let b1_virt = crate::memory::vmm::map_mmio(b1, size_bytes);
-                let b2_virt = crate::memory::vmm::map_mmio(b2, size_bytes);
+                let b1_virt = b1 + crate::memory::paging::HHDM_OFFSET;
+                let b2_virt = b2 + crate::memory::paging::HHDM_OFFSET;
 
                 core::ptr::write_bytes(b1_virt as *mut u8, 0, size_bytes);
                 core::ptr::write_bytes(b2_virt as *mut u8, 0, size_bytes);
@@ -122,7 +121,7 @@ impl DisplayServer {
         let size_bytes = self.pitch as usize * self.height as usize;
         
         unsafe {
-            self.framebuffer = crate::memory::vmm::map_mmio(vbe.framebuffer as u64, size_bytes);
+            self.framebuffer = crate::memory::paging::phys_to_virt(crate::memory::address::PhysAddr::new(vbe.framebuffer as u64)).as_u64();
         }
 
         let pages = (size_bytes + 4095) / 4096;
@@ -156,14 +155,6 @@ impl DisplayServer {
 
                 self.framebuffer = next_buffer_virt;
                 self.double_buffer = current_buffer_virt;
-
-
-                let size_bytes = (self.pitch * self.height) as usize;
-                core::ptr::copy_nonoverlapping(
-                    self.framebuffer as *const u8,
-                    self.double_buffer as *mut u8,
-                    size_bytes,
-                );
             } else {
                 let buffer_size = self.pitch as u64 * self.height as u64;
                 core::ptr::copy(
@@ -238,8 +229,39 @@ impl DisplayServer {
             for row in 0..copy_height {
                 let src_row_ptr = src_base.add((src_off_y + row) * src_pitch + src_off_x);
                 let dst_row_ptr = dst_base.add((dst_y as usize + row) * dst_pitch + (dst_x as usize));
-
                 let is_top_or_bottom = (src_off_y + row) == 0 || (src_off_y + row) == (height as usize - 1);
+
+                if !treat_as_transparent && !is_top_or_bottom {
+                    let mut start_col = 0;
+                    let mut end_col = copy_width;
+
+                    if src_off_x == 0 && copy_width > 0 {
+                        if let Some(color) = border_color {
+                            *dst_row_ptr.add(0) = color;
+                        } else {
+                            *dst_row_ptr.add(0) = *src_row_ptr.add(0);
+                        }
+                        start_col = 1;
+                    }
+
+                    if (src_off_x + copy_width) == (width as usize) && copy_width > start_col {
+                        if let Some(color) = border_color {
+                            *dst_row_ptr.add(copy_width - 1) = color;
+                        } else {
+                            *dst_row_ptr.add(copy_width - 1) = *src_row_ptr.add(copy_width - 1);
+                        }
+                        end_col = copy_width - 1;
+                    }
+
+                    if end_col > start_col {
+                        core::ptr::copy_nonoverlapping(
+                            src_row_ptr.add(start_col),
+                            dst_row_ptr.add(start_col),
+                            end_col - start_col,
+                        );
+                    }
+                    continue;
+                }
 
                 if is_top_or_bottom {
                     for col in 0..copy_width {
@@ -477,6 +499,38 @@ impl DisplayServer {
                 let dst_row_ptr = dst_base.add((intersect_y as usize + row) * dst_pitch + (intersect_x as usize));
 
                 let is_top_or_bottom = (src_off_y + row) == 0 || (src_off_y + row) == (height as usize - 1);
+
+                if !treat_as_transparent && !is_top_or_bottom {
+                    let mut start_col = 0;
+                    let mut end_col = copy_width;
+
+                    if src_off_x == 0 && copy_width > 0 {
+                        if let Some(color) = border_color {
+                            *dst_row_ptr.add(0) = color;
+                        } else {
+                            *dst_row_ptr.add(0) = *src_row_ptr.add(0);
+                        }
+                        start_col = 1;
+                    }
+
+                    if (src_off_x + copy_width) == (width as usize) && copy_width > start_col {
+                        if let Some(color) = border_color {
+                            *dst_row_ptr.add(copy_width - 1) = color;
+                        } else {
+                            *dst_row_ptr.add(copy_width - 1) = *src_row_ptr.add(copy_width - 1);
+                        }
+                        end_col = copy_width - 1;
+                    }
+
+                    if end_col > start_col {
+                        core::ptr::copy_nonoverlapping(
+                            src_row_ptr.add(start_col),
+                            dst_row_ptr.add(start_col),
+                            end_col - start_col,
+                        );
+                    }
+                    continue;
+                }
 
                 if is_top_or_bottom {
                     for col in 0..copy_width {
@@ -908,6 +962,15 @@ impl DisplayServer {
                 }
 
                 virtio::flush(sx, sy, sw, sh, self.width as u32, self.active_resource_id);
+
+                if overlap_x && overlap_y {
+                    let mouse_inside = (mx as u32) >= sx && (mx as u32 + mw) <= (sx + sw) &&
+                        (my as u32) >= sy && (my as u32 + mh) <= (sy + sh);
+
+                    if !mouse_inside {
+                        virtio::flush(mx as u32, my as u32, mw, mh, self.width as u32, self.active_resource_id);
+                    }
+                }
             } else {
                 self.copy_to_fb(x, y, w, h);
 

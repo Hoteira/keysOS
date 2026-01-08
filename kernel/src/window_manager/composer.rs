@@ -299,6 +299,23 @@ impl Composer {
         unsafe {
             let display_server = &mut *(&raw mut DISPLAY_SERVER);
 
+            let mut start_index = self.windows.len().saturating_sub(1);
+            let mut occluded = false;
+            for i in 0..self.windows.len() {
+                let w = &self.windows[i];
+                if w.w_type == Items::Null { continue; }
+
+                if !w.treat_as_transparent &&
+                    w.x as i32 <= dirty_x &&
+                    w.y as i32 <= dirty_y &&
+                    (w.x as i32 + w.width as i32) >= (dirty_x + dirty_w as i32) &&
+                    (w.y as i32 + w.height as i32) >= (dirty_y + dirty_h as i32) {
+                    start_index = i;
+                    occluded = true;
+                    break;
+                }
+            }
+
             if display_server.double_buffer != 0 {
                 let db_ptr = display_server.double_buffer as *mut u32;
                 let pitch_u32 = (display_server.pitch / 4) as usize;
@@ -310,24 +327,12 @@ impl Composer {
                 let end_x = (dirty_x + dirty_w as i32).min(width);
                 let end_y = (dirty_y + dirty_h as i32).min(height);
 
-                if end_x > start_x && end_y > start_y {}
-            }
-
-            
-            
-            let mut start_index = self.windows.len().saturating_sub(1);
-            for i in 0..self.windows.len() {
-                let w = &self.windows[i];
-                if w.w_type == Items::Null { continue; }
-
-                
-                if !w.treat_as_transparent &&
-                    w.x as i32 <= dirty_x &&
-                    w.y as i32 <= dirty_y &&
-                    (w.x as i32 + w.width as i32) >= (dirty_x + dirty_w as i32) &&
-                    (w.y as i32 + w.height as i32) >= (dirty_y + dirty_h as i32) {
-                    start_index = i;
-                    break;
+                if !occluded && end_x > start_x && end_y > start_y {
+                    for y in start_y..end_y {
+                        let row_offset = y as usize * pitch_u32;
+                        let row_ptr = db_ptr.add(row_offset + start_x as usize);
+                        core::ptr::write_bytes(row_ptr as *mut u8, 0, (end_x - start_x) as usize * 4);
+                    }
                 }
             }
 
@@ -425,6 +430,23 @@ impl Composer {
         unsafe {
             let display_server = &mut *(&raw mut DISPLAY_SERVER);
 
+            let mut start_index = self.windows.len().saturating_sub(1);
+            let mut occluded = false;
+            for i in 0..self.windows.len() {
+                let w = &self.windows[i];
+                if w.w_type == Items::Null { continue; }
+
+                if !w.treat_as_transparent &&
+                    w.x as i32 <= dirty_x &&
+                    w.y as i32 <= dirty_y &&
+                    (w.x as i32 + w.width as i32) >= (dirty_x + dirty_w as i32) &&
+                    (w.y as i32 + w.height as i32) >= (dirty_y + dirty_h as i32) {
+                    start_index = i;
+                    occluded = true;
+                    break;
+                }
+            }
+
             if display_server.double_buffer != 0 {
                 let db_ptr = display_server.double_buffer as *mut u32;
                 let pitch_u32 = (display_server.pitch / 4) as usize;
@@ -436,16 +458,16 @@ impl Composer {
                 let end_x = (dirty_x + dirty_w as i32).min(width);
                 let end_y = (dirty_y + dirty_h as i32).min(height);
 
-                if end_x > start_x && end_y > start_y {
+                if !occluded && end_x > start_x && end_y > start_y {
                     for y in start_y..end_y {
                         let row_offset = y as usize * pitch_u32;
-                        let _start_ptr = db_ptr.add(row_offset + start_x as usize);
-                        let _count = (end_x - start_x) as usize;
+                        let row_ptr = db_ptr.add(row_offset + start_x as usize);
+                        core::ptr::write_bytes(row_ptr as *mut u8, 0, (end_x - start_x) as usize * 4);
                     }
                 }
             }
 
-            for i in (0..self.windows.len()).rev() {
+            for i in (0..=start_index).rev() {
                 match self.windows[i].w_type {
                     Items::Null => {}
                     _ => {
