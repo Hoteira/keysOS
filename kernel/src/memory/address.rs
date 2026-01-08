@@ -3,11 +3,11 @@ use core::ops::{Add, AddAssign, Sub, SubAssign};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(transparent)]
-pub struct PhysAddr(u64);
+pub struct PhysAddr(pub u64);
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(transparent)]
-pub struct VirtAddr(u64);
+pub struct VirtAddr(pub u64);
 
 impl PhysAddr {
     pub const fn new(addr: u64) -> Self {

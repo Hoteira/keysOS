@@ -313,14 +313,14 @@ impl Composer {
                 if end_x > start_x && end_y > start_y {}
             }
 
-            // Occlusion Culling: Find the front-most window that is opaque and covers the dirty rect.
-            // We only need to draw from that window forward.
+            
+            
             let mut start_index = self.windows.len().saturating_sub(1);
             for i in 0..self.windows.len() {
                 let w = &self.windows[i];
                 if w.w_type == Items::Null { continue; }
 
-                // If window covers the dirty rect and is opaque
+                
                 if !w.treat_as_transparent &&
                     w.x as i32 <= dirty_x &&
                     w.y as i32 <= dirty_y &&

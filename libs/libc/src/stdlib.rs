@@ -121,7 +121,7 @@ pub unsafe extern "C" fn mkstemps(template: *mut c_char, suffix_len: c_int) -> c
     for i in 0..6 {
         *template.add(start + i) = b'0' as c_char;
     }
-    // O_RDWR (2) | O_CREAT (64) | O_EXCL (128) = 194
+    
     crate::unistd::open(template, 194, 0o600)
 }
 
@@ -158,10 +158,10 @@ pub unsafe extern "C" fn strtol(nptr: *const c_char, endptr: *mut *mut c_char, b
     let mut acc: i64 = 0;
     let mut neg = false;
 
-    // Skip whitespace
+    
     while *s == 32 || (*s >= 9 && *s <= 13) { s = s.add(1); }
 
-    // Check sign
+    
     if *s == b'-' as c_char {
         neg = true;
         s = s.add(1);

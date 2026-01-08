@@ -1,14 +1,23 @@
 pub mod heap;
 pub mod mmio;
 
-use crate::os::syscall;
+
+
 
 pub fn malloc(size: usize) -> usize {
-    unsafe { syscall(112, size as u64, 0, 0) as usize }
+    unsafe {
+        let layout = core::alloc::Layout::from_size_align(size, 8).unwrap();
+        alloc::alloc::alloc(layout) as usize
+    }
 }
 
-pub fn free(base: usize, pid: u64) {
-    let main_pid = (pid >> 32);
-    let child_pid = pid & 0xFFFFFFFF;
-    unsafe { syscall(113, base as u64, main_pid, child_pid); }
+pub fn free(ptr: usize, _pid: u64) {
+    unsafe {
+        
+        
+        
+        
+        let layout = core::alloc::Layout::from_size_align(0, 8).unwrap();
+        alloc::alloc::dealloc(ptr as *mut u8, layout);
+    }
 }

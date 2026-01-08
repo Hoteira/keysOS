@@ -98,7 +98,7 @@ pub fn draw_square_alpha(
     let r_sq = r * r;
     let r_ceil = ceil_f32(r) as usize;
 
-    // FAST PATH: Solid opaque rectangle with no rounding and no border
+    
     if r < 0.1 && border_size == 0 && is_bg_opaque {
         for row in y..end_y {
             let start = row * buffer_width + x;
@@ -267,11 +267,11 @@ fn parse_ansi_text(text: &str, default_color: Color, default_size: f32) -> (Vec<
 
     while let Some(c) = chars.next() {
         if c == '\x1B' && chars.peek() == Some(&'[') {
-            chars.next(); // Consume '['
+            chars.next(); 
 
             let mut params_str = alloc::string::String::new();
             
-            // Consume Parameter and Intermediate bytes (0x20-0x3F)
+            
             while let Some(&p) = chars.peek() {
                 if p >= '\x20' && p <= '\x3F' {
                     chars.next();
@@ -281,7 +281,7 @@ fn parse_ansi_text(text: &str, default_color: Color, default_size: f32) -> (Vec<
                 }
             }
 
-            // Consume Final byte (0x40-0x7E)
+            
             let mut final_char = '\0';
             if let Some(&f) = chars.peek() {
                 if f >= '\x40' && f <= '\x7E' {
@@ -290,11 +290,11 @@ fn parse_ansi_text(text: &str, default_color: Color, default_size: f32) -> (Vec<
                 }
             }
 
-            // Process SGR (Select Graphic Rendition) -> 'm'
+            
             if final_char == 'm' {
                 let parts: Vec<&str> = params_str.split(';').collect();
                 
-                // If empty "m", it's a reset
+                
                 if parts.len() == 1 && parts[0].is_empty() {
                     current_fg = default_color;
                     current_bg = Color::rgba(0, 0, 0, 0);
@@ -319,7 +319,7 @@ fn parse_ansi_text(text: &str, default_color: Color, default_size: f32) -> (Vec<
                                 39 => current_fg = default_color,
                                 49 => current_bg = Color::rgba(0, 0, 0, 0),
                                 
-                                30..=37 => { // FG
+                                30..=37 => { 
                                     let idx = code - 30;
                                     let colors = [
                                         Color::rgb(0,0,0), Color::rgb(170,0,0), Color::rgb(0,170,0), Color::rgb(170,85,0),
@@ -327,7 +327,7 @@ fn parse_ansi_text(text: &str, default_color: Color, default_size: f32) -> (Vec<
                                     ];
                                     current_fg = colors[idx as usize];
                                 }
-                                90..=97 => { // Bright FG
+                                90..=97 => { 
                                     let idx = code - 90;
                                     let colors = [
                                         Color::rgb(85,85,85), Color::rgb(255,85,85), Color::rgb(85,255,85), Color::rgb(255,255,85),
@@ -335,7 +335,7 @@ fn parse_ansi_text(text: &str, default_color: Color, default_size: f32) -> (Vec<
                                     ];
                                     current_fg = colors[idx as usize];
                                 }
-                                40..=47 => { // BG
+                                40..=47 => { 
                                     let idx = code - 40;
                                     let colors = [
                                         Color::rgb(0,0,0), Color::rgb(170,0,0), Color::rgb(0,170,0), Color::rgb(170,85,0),
@@ -343,7 +343,7 @@ fn parse_ansi_text(text: &str, default_color: Color, default_size: f32) -> (Vec<
                                     ];
                                     current_bg = colors[idx as usize];
                                 }
-                                100..=107 => { // Bright BG
+                                100..=107 => { 
                                     let idx = code - 100;
                                     let colors = [
                                         Color::rgb(85,85,85), Color::rgb(255,85,85), Color::rgb(85,255,85), Color::rgb(255,255,85),
@@ -351,7 +351,7 @@ fn parse_ansi_text(text: &str, default_color: Color, default_size: f32) -> (Vec<
                                     ];
                                     current_bg = colors[idx as usize];
                                 }
-                                38 | 48 => { // 256/RGB
+                                38 | 48 => { 
                                     let is_bg = code == 48;
                                     if i + 1 < parts.len() {
                                         if parts[i+1] == "2" && i + 4 < parts.len() {
@@ -374,7 +374,7 @@ fn parse_ansi_text(text: &str, default_color: Color, default_size: f32) -> (Vec<
                 }
             }
         } else {
-            if c == '\x1B' { continue; } // Ignore stray ESC
+            if c == '\x1B' { continue; } 
 
             let start = clean_pos;
             clean_text.push(c);
@@ -393,8 +393,8 @@ fn parse_ansi_text(text: &str, default_color: Color, default_size: f32) -> (Vec<
 
             if is_inverse {
                 let tmp = eff_fg;
-                // If background was transparent, default to black for foreground when inversed
-                // to avoid white-on-white text if default_color is white.
+                
+                
                 eff_fg = if eff_bg.a == 0 { Color::rgb(0, 0, 0) } else { eff_bg };
                 eff_bg = tmp;
                 eff_bg.a = 255; 
@@ -496,17 +496,17 @@ pub fn draw_text_formatted(
         let glyph_y_start = (current_baseline_isize + metrics.base_line as isize) as isize;
         let glyph_x = (current_x as isize + metrics.left_side_bearing) as usize;
 
-        // Draw Background if opaque
+        
         if segment.bg_color.a > 0 {
             let bg_x = current_x;
             let bg_w = metrics.advance_width;
-            // Approximate the line height and vertical position. 
-            // current_baseline_isize is the Y coordinate of the baseline.
-            // We want the box to cover from slightly above the cap-height to slightly below the baseline.
+            
+            
+            
             let bg_y_isize = current_baseline_isize - (segment.size * 0.8) as isize; 
             let bg_h = (segment.size * 1.2) as usize;
             
-            // Draw rectangle
+            
             if bg_y_isize + (bg_h as isize) >= clip_y as isize && bg_y_isize <= limit_y as isize {
                  for r in 0..bg_h {
                      let dy = bg_y_isize + r as isize;

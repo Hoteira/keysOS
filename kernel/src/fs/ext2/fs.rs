@@ -685,7 +685,7 @@ impl VfsNode for Ext2Node {
 
         while offset < total_size {
 
-            // Determine physical block for this offset
+            
 
             let block_idx = (offset / block_size as u64) as u32;
 
@@ -720,11 +720,11 @@ impl VfsNode for Ext2Node {
                         let name = String::from_utf8_lossy(name_slice).into_owned();
 
 
-                        // Only read the inode if we need to return full nodes. 
+                        
 
-                        // Note: Reading inodes for *every* child is still heavy, but memory usage is lower per loop iteration.
+                        
 
-                        // Optimization: We could lazy-load inodes, but VfsNode requires size/kind immediately.
+                        
 
                         let child_inode = fs.read_inode(entry.inode);
 
@@ -970,7 +970,7 @@ impl VfsNode for Ext2Node {
                         if entry_index >= start_index {
                             let name_len = entry.name_len as usize;
 
-                            // Check if entry fits in remaining buffer
+                            
                             if bytes_written + 2 + name_len > buffer.len() {
                                 return Ok((bytes_written, count_read));
                             }
@@ -978,13 +978,13 @@ impl VfsNode for Ext2Node {
                             let child_inode = fs.read_inode(entry.inode);
 
                             let mapped_type = if (child_inode.mode & 0xF000) == 0x4000 {
-                                2 // Directory
+                                2 
 
                             } else if (child_inode.mode & 0xF000) == 0x8000 {
-                                1 // File
+                                1 
 
                             } else {
-                                0 // Unknown
+                                0 
 
                             };
 

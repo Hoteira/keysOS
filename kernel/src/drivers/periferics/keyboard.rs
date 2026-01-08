@@ -73,7 +73,7 @@ const SCANCODE_MAP_UPPERCASE: [char; 128] = [
     '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0',
 ];
 
-// State to track shift key status
+
 static mut SHIFT_ACTIVE: bool = false;
 static mut E0_ACTIVE: bool = false;
 static mut SUPER_ACTIVE: bool = false;
@@ -119,43 +119,43 @@ fn wait_for_write() -> bool {
 
 #[allow(dead_code)]
 pub fn init() {
-    // Disable PS/2 Port 1 first to prevent interference
+    
     if !wait_for_write() { return; }
     outb(COMMAND_PORT, PS2_CMD_DISABLE_PORT1);
 
-    // Flush the Output Buffer (discard pending data)
+    
     while (inb(STATUS_PORT) & 0x01) != 0 {
         inb(DATA_PORT);
     }
 
-    // Read Controller Configuration Byte
+    
     if !wait_for_write() { return; }
     outb(COMMAND_PORT, PS2_CMD_READ_CONFIG);
     if !wait_for_read() { return; }
     let mut config = inb(DATA_PORT);
 
-    // Configure Controller:
-    // Bit 0: Enable IRQ1 (Keyboard)
-    // Bit 6: Enable Translation (Convert Set 2 to Set 1)
+    
+    
+    
     config |= 0x01;
     config |= 0x40;
 
-    // Write Controller Configuration Byte
+    
     if !wait_for_write() { return; }
     outb(COMMAND_PORT, PS2_CMD_WRITE_CONFIG);
     if !wait_for_write() { return; }
     outb(DATA_PORT, config);
 
-    // Enable PS/2 Port 1
+    
     if !wait_for_write() { return; }
     outb(COMMAND_PORT, PS2_CMD_ENABLE_PORT1);
 
-    // Reset Device (Optional, can be slow, skipping for speed unless needed)
-    // Instead, just Enable Scanning
+    
+    
     if !wait_for_write() { return; }
     outb(DATA_PORT, KEYBOARD_CMD_ENABLE_SCANNING);
 
-    // Wait for ACK (0xFA)
+    
     if wait_for_read() {
         let _ack = inb(DATA_PORT);
     }
@@ -177,7 +177,7 @@ pub fn handle_scancode(scancode: u8) -> Option<(u32, bool)> {
         let pressed = !is_release;
 
         match scancode_val {
-            // Windows Key (Multi-byte scancode E0 5B / E0 5C)
+            
             0x5B | 0x5C if is_e0 => {
                 SUPER_ACTIVE = pressed;
                 None

@@ -44,7 +44,7 @@ pub extern "C" fn main() -> i32 {
     let mut root = Widget::frame(1)
         .width(Size::Relative(100))
         .height(Size::Relative(100))
-        .background_color(Color::rgba(20, 20, 20, 200))
+        .background_color(Color::rgba(20, 20, 20, 255))
         .set_display(Display::None);
 
 

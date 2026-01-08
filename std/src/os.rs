@@ -93,7 +93,7 @@ pub fn print(s: &str) {
 
 pub fn debug_print(s: &str) {
     unsafe {
-        syscall(9, s.as_ptr() as u64, s.len() as u64, 0);
+        syscall(999, s.as_ptr() as u64, s.len() as u64, 0);
     }
 }
 
@@ -202,7 +202,7 @@ pub fn spawn_with_fds(path: &str, args: &[&str], fds: &[(u8, u8)]) -> usize {
     use alloc::vec::Vec;
     use alloc::string::String;
 
-    // We MUST null-terminate strings for the kernel CStr::from_ptr
+    
     let mut c_args = Vec::new();
     for &a in args {
         let mut s = String::from(a);
@@ -277,14 +277,14 @@ pub fn get_process_list() -> alloc::vec::Vec<ProcessInfo> {
     let max_count = 128;
     let mut processes = alloc::vec::Vec::with_capacity(max_count);
 
-    // Initialize with default values to set length safely (ProcessInfo is Copy)
+    
     processes.resize(max_count, ProcessInfo { pid: 0, state: 0, name: [0; 32] });
 
     let count = unsafe {
         syscall(110, processes.as_mut_ptr() as u64, max_count as u64, 0) as usize
     };
 
-    // Truncate to actual count returned by kernel
+    
     if count <= max_count {
         processes.truncate(count);
     }
@@ -293,4 +293,13 @@ pub fn get_process_list() -> alloc::vec::Vec<ProcessInfo> {
 
 pub fn get_process_memory(pid: u64) -> usize {
     unsafe { syscall(111, pid, 0, 0) as usize }
+}
+
+
+pub fn brk(addr: usize) -> usize {
+    unsafe { syscall(12, addr as u64, 0, 0) as usize }
+}
+
+pub fn mmap(addr: usize, len: usize) -> usize {
+    unsafe { syscall6(9, addr as u64, len as u64, 0, 0, 0, 0) as usize }
 }

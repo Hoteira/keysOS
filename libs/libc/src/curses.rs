@@ -2,7 +2,7 @@ use core::ffi::{c_char, c_int, c_void};
 
 pub type chtype = u32;
 
-// --- CTYPE / WCHAR stubs ---
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn iswalnum(c: u32) -> c_int {
     if (c >= 'a' as u32 && c <= 'z' as u32) || (c >= 'A' as u32 && c <= 'Z' as u32) || (c >= '0' as u32 && c <= '9' as u32) { 1 } else { 0 }
@@ -16,7 +16,7 @@ pub unsafe extern "C" fn iswpunct(c: u32) -> c_int {
     if !((c >= 'a' as u32 && c <= 'z' as u32) || (c >= 'A' as u32 && c <= 'Z' as u32) || (c >= '0' as u32 && c <= '9' as u32) || c == ' ' as u32) { 1 } else { 0 }
 }
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn wcwidth(_c: u32) -> c_int { 1 } // Assume 1 for now
+pub unsafe extern "C" fn wcwidth(_c: u32) -> c_int { 1 } 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn towlower(c: u32) -> u32 {
     if c >= 'A' as u32 && c <= 'Z' as u32 { c + 32 } else { c }
@@ -46,11 +46,11 @@ pub static mut stdscr: *mut WINDOW = core::ptr::null_mut();
 #[unsafe(no_mangle)]
 pub static mut curscr: *mut WINDOW = core::ptr::null_mut();
 
-// --- NCURSES functions ---
+
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn initscr() -> *mut WINDOW { 
-    // crate::stdio::krake_debug_printf(b"initscr() called\n\0".as_ptr() as *const c_char);
+    
     let mut ws = core::mem::zeroed::<crate::sys::winsize>();
     let res = std::os::syscall(16, 0, 0x5413, &mut ws as *mut _ as u64);
     if res == 0 {
@@ -73,7 +73,7 @@ pub unsafe extern "C" fn endwin() -> c_int { 0 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn newwin(nlines: c_int, ncols: c_int, begin_y: c_int, begin_x: c_int) -> *mut WINDOW {
-    // crate::stdio::krake_debug_printf(b"newwin(%d, %d, %d, %d) called\n\0".as_ptr() as *const c_char, nlines, ncols, begin_y, begin_x);
+    
     let ptr = crate::stdlib::malloc(core::mem::size_of::<WINDOW>()) as *mut WINDOW;
     if !ptr.is_null() {
         (*ptr).cury = 0;
@@ -101,7 +101,7 @@ pub unsafe extern "C" fn delwin(win: *mut WINDOW) -> c_int {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn wmove(win: *mut WINDOW, y: c_int, x: c_int) -> c_int {
     if win.is_null() { 
-        // crate::stdio::krake_debug_printf(b"wmove(NULL, %d, %d) called!\n\0".as_ptr() as *const c_char, y, x);
+        
         return -1; 
     }
     (*win).cury = y;
@@ -113,7 +113,7 @@ pub unsafe extern "C" fn wmove(win: *mut WINDOW, y: c_int, x: c_int) -> c_int {
     let mut buf = [0u8; 32];
     let mut pos = 0;
     
-    // Manual ANSI Cup generation: \x1B[row;colH
+    
     buf[pos] = 0x1B; pos += 1;
     buf[pos] = b'['; pos += 1;
     
@@ -164,13 +164,13 @@ pub unsafe extern "C" fn wgetch(win: *mut WINDOW) -> c_int {
         let mut buf = [0u8; 1];
         let n = std::os::file_read(0, &mut buf);
         if n == 1 { 
-            // crate::stdio::krake_debug_printf(b"wgetch() got: %d\n\0".as_ptr() as *const c_char, buf[0] as c_int);
+            
             return buf[0] as c_int;
         } else if n == usize::MAX {
             return -1;
         } else if n == 0 {
             if non_blocking {
-                return -1; // ERR
+                return -1; 
             }
         }
         std::os::yield_task();
@@ -194,9 +194,9 @@ pub unsafe extern "C" fn wredrawln(_win: *mut WINDOW, _beg: c_int, _num: c_int) 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn werase(win: *mut WINDOW) -> c_int {
     if win.is_null() { return -1; }
-    // crate::stdio::krake_debug_printf(b"werase(window at %d,%d, size %dx%d) called\n\0".as_ptr() as *const c_char, (*win).begx, (*win).begy, (*win).maxx, (*win).maxy);
     
-    let spaces = b"                                                                                                                                "; // 128 spaces
+    
+    let spaces = b"                                                                                                                                "; 
     
     for y in 0..(*win).maxy {
         wmove(win, y, 0);
@@ -243,19 +243,14 @@ pub unsafe extern "C" fn waddch(win: *mut WINDOW, ch: u32) -> c_int {
     let char_code = ch & 0xFF; 
     if char_code == 0 { return 0; }
     if let Some(c) = char::from_u32(char_code) {
-        /*
-        if WADDCH_COUNT < 100 {
-            crate::stdio::krake_debug_printf(b"waddch('%c')\n\0".as_ptr() as *const c_char, char_code);
-            WADDCH_COUNT += 1;
-        }
-        */
+        
         let s = c.encode_utf8(&mut buf);
         std::os::print(s);
         if !win.is_null() {
-            (*win).curx += 1; // Basic tracking
+            (*win).curx += 1; 
         }
     } else {
-        // crate::stdio::krake_debug_printf(b"waddch invalid char: %u\n\0".as_ptr() as *const c_char, ch);
+        
     }
     0
 }
@@ -368,11 +363,11 @@ pub unsafe extern "C" fn nonl() -> c_int { 0 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn raw() -> c_int { 0 }
 
-// --- REGEX stubs ---
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn regcomp(_preg: *mut c_void, _regex: *const c_char, _cflags: c_int) -> c_int { 0 }
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn regexec(_preg: *const c_void, _string: *const c_char, _nmatch: usize, _pmatch: *mut c_void, _eflags: c_int) -> c_int { 1 } // No match
+pub unsafe extern "C" fn regexec(_preg: *const c_void, _string: *const c_char, _nmatch: usize, _pmatch: *mut c_void, _eflags: c_int) -> c_int { 1 } 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn regerror(_errcode: c_int, _preg: *const c_void, _errbuf: *mut c_char, _errbuf_size: usize) -> usize { 
     if _errbuf_size > 0 {
@@ -386,7 +381,7 @@ pub unsafe extern "C" fn regerror(_errcode: c_int, _preg: *const c_void, _errbuf
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn regfree(_preg: *mut c_void) {}
 
-// --- MISC stubs ---
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn wctomb(s: *mut c_char, wc: u32) -> c_int {
     if s.is_null() { return 0; }
@@ -400,7 +395,7 @@ pub unsafe extern "C" fn sigaction(_sig: c_int, _act: *const c_void, _oact: *mut
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn tgetstr(_id: *const c_char, _area: *mut *mut c_char) -> *mut c_char { core::ptr::null_mut() }
 
-// --- LIBGEN stubs ---
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dirname(path: *mut c_char) -> *mut c_char {
     let len = crate::string::strlen(path);

@@ -49,19 +49,19 @@ pub extern "C" fn main() -> i32 {
     let width = 800;
     let height = 400;
 
-    // Manually calculate and set initial terminal size so spawned shell inherits it
+    
     let font_size = 14.0f32;
     let char_w = (font_size * 0.7) as usize;
     let line_h = (font_size * 1.3) as usize;
 
-    // Calculate available space assuming padding of 10 on each side (20 total)
+    
     let avail_w = (width - width * 4 / 100) as f32;
     let avail_h = (height - height * 5 / 100) as f32;
 
     if char_w > 0 && line_h > 0 {
         let cols = (avail_w / char_w as f32) as u16;
         let rows = (avail_h / line_h as f32) as u16;
-        let rows = rows.saturating_sub(2); // Subtract rows safety margin
+        let rows = rows.saturating_sub(2); 
 
         let ws = std::os::WinSize {
             ws_row: rows,
@@ -158,15 +158,15 @@ pub extern "C" fn main() -> i32 {
                                 std::os::file_write(unsafe { TERM_WRITE_FD }, s.as_bytes());
                             }
                         } else {
-                            // Special keys
+                            
                             let seq = match e.key {
-                                0x110003 => Some("\x1B[A"), // Up
-                                0x110004 => Some("\x1B[B"), // Down
-                                0x110002 => Some("\x1B[C"), // Right
-                                0x110001 => Some("\x1B[D"), // Left
-                                0x110007 => None, // Shift
-                                0x110005 => None, // Ctrl
-                                0x110006 => None, // Alt
+                                0x110003 => Some("\x1B[A"), 
+                                0x110004 => Some("\x1B[B"), 
+                                0x110002 => Some("\x1B[C"), 
+                                0x110001 => Some("\x1B[D"), 
+                                0x110007 => None, 
+                                0x110005 => None, 
+                                0x110006 => None, 
                                 _ => None,
                             };
                             if let Some(s) = seq {
@@ -178,7 +178,7 @@ pub extern "C" fn main() -> i32 {
                     }
                 }
                 Event::Mouse(e) => {
-                    if e.scroll != 0 && !term_buffer.is_alt { // BLOCK SCROLL IN RAW MODE
+                    if e.scroll != 0 && !term_buffer.is_alt { 
                         if let Some(widget) = win.find_widget_by_id_mut(2) {
                             widget.handle_scroll(e.scroll);
                             win.draw();
@@ -234,12 +234,12 @@ pub extern "C" fn main() -> i32 {
                                     let seq_str = unsafe { core::str::from_utf8_unchecked(seq) }.to_string();
                                     (Some(TermAction::Csi(cmd, seq_str)), j + 1)
                                 } else if bytes.len() > 64 {
-                                    (None, 1) // Discard garbage
+                                    (None, 1) 
                                 } else {
-                                    (None, 0) // Wait
+                                    (None, 0) 
                                 }
                             } else {
-                                (None, 1) // Discard stray ESC
+                                (None, 1) 
                             }
                         } else {
                             let mut len = 1;
@@ -265,23 +265,23 @@ pub extern "C" fn main() -> i32 {
                     Some(TermAction::Newline) => term_buffer.newline(),
                     Some(TermAction::Csi(cmd, seq)) => {
                         match cmd {
-                            b'A' => { // Up
+                            b'A' => { 
                                 let n = if seq.is_empty() { 1 } else { seq.parse::<usize>().unwrap_or(1) };
                                 term_buffer.cursor_row = term_buffer.cursor_row.saturating_sub(n);
                             }
-                            b'B' => { // Down
+                            b'B' => { 
                                 let n = if seq.is_empty() { 1 } else { seq.parse::<usize>().unwrap_or(1) };
                                 term_buffer.cursor_row += n;
                             }
-                            b'C' => { // Forward
+                            b'C' => { 
                                 let n = if seq.is_empty() { 1 } else { seq.parse::<usize>().unwrap_or(1) };
                                 term_buffer.cursor_col += n;
                             }
-                            b'D' => { // Backward
+                            b'D' => { 
                                 let n = if seq.is_empty() { 1 } else { seq.parse::<usize>().unwrap_or(1) };
                                 term_buffer.cursor_col = term_buffer.cursor_col.saturating_sub(n);
                             }
-                            b'G' => { // Horizontal Absolute
+                            b'G' => { 
                                 let n = if seq.is_empty() { 1 } else { seq.parse::<usize>().unwrap_or(1) };
                                 term_buffer.cursor_col = n.saturating_sub(1);
                             }
@@ -311,24 +311,24 @@ pub extern "C" fn main() -> i32 {
                                     }
                                 }
                             }
-                            b'd' => { // Vertical Absolute
+                            b'd' => { 
                                 let n = if seq.is_empty() { 1 } else { seq.parse::<usize>().unwrap_or(1) };
                                 term_buffer.cursor_row = n.saturating_sub(1);
                             }
                             b'K' => {
-                                if seq == "1" { // Start to cursor
+                                if seq == "1" { 
                                     let current = if term_buffer.is_alt { &mut term_buffer.alt_lines } else { &mut term_buffer.lines };
                                     if term_buffer.cursor_row < current.len() {
                                         for i in 0..core::cmp::min(term_buffer.cursor_col + 1, current[term_buffer.cursor_row].len()) {
                                             current[term_buffer.cursor_row][i] = Cell::default();
                                         }
                                     }
-                                } else if seq == "2" { // Whole line
+                                } else if seq == "2" { 
                                     let current = if term_buffer.is_alt { &mut term_buffer.alt_lines } else { &mut term_buffer.lines };
                                     if term_buffer.cursor_row < current.len() {
                                         current[term_buffer.cursor_row].clear();
                                     }
-                                } else { // Cursor to end (0 or empty)
+                                } else { 
                                     term_buffer.clear_line();
                                 }
                             }

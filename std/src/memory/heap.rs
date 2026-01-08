@@ -125,7 +125,7 @@ unsafe fn grow_heap(min_size: usize) -> bool {
 
     #[cfg(feature = "userland")]
     {
-        let mut size = 4096 * 1024; // 4MB increments
+        let mut size = 4096 * 1024; 
         if min_size > size {
             size = min_size.next_power_of_two();
         }
@@ -134,12 +134,15 @@ unsafe fn grow_heap(min_size: usize) -> bool {
             return false;
         }
 
-        let ptr = crate::os::syscall(112, size as u64, 0, 0) as *mut u8;
-        if ptr.is_null() {
+        
+        
+        let ptr = crate::os::syscall6(9, 0, size as u64, 0, 0, 0, 0) as *mut u8;
+        
+        if ptr as u64 == u64::MAX || ptr.is_null() {
             return false;
         }
 
-        // Zero the memory (optional but safe)
+        
         write_bytes(ptr, 0, size);
 
         let start = ptr as usize;
@@ -258,7 +261,7 @@ unsafe impl GlobalAlloc for Allocator {
 
         self.lock();
 
-        // Bin allocation strategy... (omitted detailed implementation for brevity, assumed unchanged logic flow)
+        
         let needed_total = size_of::<Used>() + layout.size();
         let aligned_total = if needed_total < MIN_BLOCK_SIZE {
             MIN_BLOCK_SIZE
@@ -335,7 +338,7 @@ unsafe impl GlobalAlloc for Allocator {
                 cur_ptr = (*cur_ptr).next;
             }
 
-            // Allocation failed, try to grow
+            
             let required = size_of::<Used>() + layout.size();
             if !grow_heap(required) {
                 break;
@@ -389,11 +392,11 @@ unsafe impl GlobalAlloc for Allocator {
         let mut prev: *mut Free = core::ptr::null_mut();
         let mut current = self.first_free.load(Ordering::Relaxed);
 
-        // Simple insertion at head for now to avoid iterating potentially multiple disjoint regions for sorting
-        // Or keep sorted? Sorted helps coalescing.
-        // If we have separate regions, sorting might be tricky if addresses are not contiguous.
-        // But coalescing only happens if adjacent.
-        // Let's stick to sorted insertion to maintain existing coalescing logic for blocks within the same region.
+        
+        
+        
+        
+        
 
         while !current.is_null() && current < free_block {
             prev = current;
@@ -407,7 +410,7 @@ unsafe impl GlobalAlloc for Allocator {
             (*prev).next = free_block;
         }
 
-        // Try coalescing with next
+        
         if !(*free_block).next.is_null() {
             let next_block = (*free_block).next;
             let free_end = (*free_block).end();
@@ -417,7 +420,7 @@ unsafe impl GlobalAlloc for Allocator {
             }
         }
 
-        // Try coalescing with prev
+        
         if !prev.is_null() {
             let prev_end = (*prev).end();
             if prev_end == free_block as *mut u8 {

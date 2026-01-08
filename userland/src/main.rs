@@ -5,7 +5,7 @@ extern crate alloc;
 use inkui::{Color, Size, Widget, Window};
 use std::fs::File;
 use std::graphics::Items;
-use std::println;
+use std::{debugln, println};
 
 #[unsafe(no_mangle)]
 pub extern "C" fn main() -> i32 {
@@ -24,7 +24,7 @@ pub extern "C" fn main() -> i32 {
     let mut root_wallpaper = Widget::frame(1)
         .width(Size::Relative(100))
         .height(Size::Relative(100))
-        .background_color(Color::rgb(0, 0, 0));
+        .background_color(Color::rgb(255, 0, 0)); 
 
 
     if let Ok(mut file) = File::open("@0xE0/sys/img/wallpaper2.png") {
@@ -35,6 +35,8 @@ pub extern "C" fn main() -> i32 {
 
             if file.read(buffer).is_ok() {
                 println!("Wallpaper loaded.");
+                
+                
                 let img_widget = Widget::image(2, buffer)
                     .width(Size::Relative(100))
                     .height(Size::Relative(100));
@@ -57,4 +59,6 @@ pub extern "C" fn main() -> i32 {
     loop {
         std::os::yield_task();
     }
+
+    0
 }

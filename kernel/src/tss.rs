@@ -1,5 +1,5 @@
 use crate::boot::TaskStateSegment;
-
+use crate::debugln;
 
 #[allow(dead_code)]
 pub static mut BASE_TSS: TaskStateSegment = TaskStateSegment {
@@ -54,15 +54,17 @@ pub fn init_ists() {
         let tss_struct = base as *mut TaskStateSegment;
 
         let ist1_frame = pmm::allocate_frame(0).expect("TSS: OOM for IST1");
-        (*tss_struct).ist1 = ist1_frame + 4096;
+        (*tss_struct).ist1 = ist1_frame + 4096 + crate::memory::paging::HHDM_OFFSET;
 
         let ist2_frame = pmm::allocate_frame(0).expect("TSS: OOM for IST2");
-        (*tss_struct).ist2 = ist2_frame + 4096;
+        (*tss_struct).ist2 = ist2_frame + 4096 + crate::memory::paging::HHDM_OFFSET;
 
         let ist3_frame = pmm::allocate_frame(0).expect("TSS: OOM for IST3");
-        (*tss_struct).ist3 = ist3_frame + 4096;
+        (*tss_struct).ist3 = ist3_frame + 4096 + crate::memory::paging::HHDM_OFFSET;
     }
 }
+
+
 
 pub fn set_tss(kernel_stack: u64) {
     unsafe {

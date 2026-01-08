@@ -14,7 +14,7 @@ pub enum FileHandle {
 }
 
 pub fn init() {
-    // Statics are already initialized to None/0 by the compiler.
+    
 }
 
 pub fn mount(disk_id: u8, fs: Box<dyn FileSystem>) {
@@ -27,7 +27,7 @@ pub fn mount(disk_id: u8, fs: Box<dyn FileSystem>) {
 pub fn open_file(disk_id: u8, path_str: &str) -> Result<usize, String> {
     let mut actual_path = String::from(path_str);
     if !path_str.starts_with('@') && !path_str.starts_with('/') {
-        // Leave as is, resolve_path will handle it? No, open_file bypasses resolve_path.
+        
     }
     
     let node = open(disk_id, path_str)?;

@@ -8,20 +8,57 @@ pub fn handle_add_window(context: &mut CPUState) {
     let window_ptr = context.rdi as *const Window;
     unsafe {
         let mut w = *window_ptr;
-        if let Some(current) = crate::interrupts::task::TASK_MANAGER.int_lock().current_task_idx() {
+        let mut tm = crate::interrupts::task::TASK_MANAGER.int_lock();
+        if let Some(current) = tm.current_task_idx() {
             w.pid = current as u64;
+            
+            
+            
+            let task = &tm.tasks[current];
+            let pml4 = task.pml4_phys;
+            
+            let buffer_size = w.width * w.height * 4;
+            
+            if let Some(kernel_addr) = crate::memory::vmm::map_user_memory_into_kernel(w.buffer as u64, buffer_size, pml4) {
+                w.buffer = kernel_addr as usize;
+                
+                
+                drop(tm);
+                
+                context.rax = (*(&raw mut COMPOSER)).add_window(w) as u64;
+            } else {
+                crate::debugln!("Failed to map window buffer to kernel space");
+                context.rax = u64::MAX;
+            }
+        } else {
+            context.rax = u64::MAX;
         }
-        context.rax = (*(&raw mut COMPOSER)).add_window(w) as u64;
     }
 }
 
 pub fn handle_update_window(context: &mut CPUState) {
     let window_ptr = context.rdi as *const Window;
     unsafe {
-        let w = *window_ptr;
-        (*(&raw mut COMPOSER)).resize_window(w);
+        let mut w = *window_ptr;
+        
+        let mut tm = crate::interrupts::task::TASK_MANAGER.int_lock();
+        if let Some(current) = tm.current_task_idx() {
+             let task = &tm.tasks[current];
+             let pml4 = task.pml4_phys;
+             let buffer_size = w.width * w.height * 4;
+             
+             if let Some(kernel_addr) = crate::memory::vmm::map_user_memory_into_kernel(w.buffer as u64, buffer_size, pml4) {
+                 w.buffer = kernel_addr as usize;
+                 drop(tm);
+                 (*(&raw mut COMPOSER)).resize_window(w);
+                 context.rax = 1;
+             } else {
+                 context.rax = 0;
+             }
+        } else {
+            context.rax = 0;
+        }
     }
-    context.rax = 1;
 }
 
 pub fn handle_update_window_area(context: &mut CPUState) {

@@ -3,7 +3,6 @@ use crate::interrupts::task::CPUState;
 use crate::debugln;
 use alloc::string::String;
 use alloc::vec::Vec;
-use log::debug;
 
 pub fn spawn_process(path: &str, args: Option<&[&str]>, fd_inheritance: Option<&[(u8, u8)]>) -> Result<u64, String> {
     let cwd_str = {
@@ -56,56 +55,70 @@ pub fn spawn_process(path: &str, args: Option<&[&str]>, fd_inheritance: Option<&
         return Err(String::from("File not found"));
     }
 
-    let pml4_phys = unsafe { (*(&raw const crate::boot::BOOT_INFO)).pml4 };
-
+    
     let pid_idx = crate::interrupts::task::TASK_MANAGER.lock().reserve_pid().map_err(|_| String::from("No free process slots"))?;
     let pid = pid_idx as u64;
 
+    
+    
+    let (new_fd_table, term_size) = {
+        let tm = crate::interrupts::task::TASK_MANAGER.int_lock();
+        let mut fds = [-1i16; 16];
+        let mut size = (80u16, 25u16);
+        if tm.current_task >= 0 {
+            let task = &tm.tasks[tm.current_task as usize];
+            fds = task.fd_table;
+            size = (task.terminal_width, task.terminal_height);
 
-    match crate::fs::elf::load_elf(&file_buf, pml4_phys, pid) {
-        Ok(entry_point) => {
-            let (new_fd_table, term_size) = {
-                let tm = crate::interrupts::task::TASK_MANAGER.int_lock();
-                let mut fds = [-1i16; 16];
-                let mut size = (80u16, 25u16);
-                if tm.current_task >= 0 {
-                    let task = &tm.tasks[tm.current_task as usize];
-                    fds = task.fd_table;
-                    size = (task.terminal_width, task.terminal_height);
-
-                    if let Some(map) = fd_inheritance {
-                        let mut custom_fds = [-1i16; 16];
-                        for &(child_fd, parent_fd) in map {
-                            if (parent_fd as usize) < 16 && (child_fd as usize) < 16 {
-                                custom_fds[child_fd as usize] = fds[parent_fd as usize];
-                            }
-                        }
-                        fds = custom_fds;
+            if let Some(map) = fd_inheritance {
+                let mut custom_fds = [-1i16; 16];
+                for &(child_fd, parent_fd) in map {
+                    if (parent_fd as usize) < 16 && (child_fd as usize) < 16 {
+                        custom_fds[child_fd as usize] = fds[parent_fd as usize];
                     }
                 }
-                (fds, size)
-            };
-
-
-            for &g_fd in new_fd_table.iter() {
-                if g_fd != -1 {
-                    crate::fs::vfs::increment_ref(g_fd as usize);
-                }
-            }
-
-
-            let init_res = {
-                let mut tm = crate::interrupts::task::TASK_MANAGER.int_lock();
-                tm.init_user_task(pid_idx, entry_point, pml4_phys, args, Some(new_fd_table), process_name_bytes, term_size)
-            };
-
-
-            match init_res {
-                Ok(_) => Ok(pid),
-                Err(_) => Err(String::from("Failed to init task")),
+                fds = custom_fds;
             }
         }
+        (fds, size)
+    };
+
+    for &g_fd in new_fd_table.iter() {
+        if g_fd != -1 {
+            crate::fs::vfs::increment_ref(g_fd as usize);
+        }
+    }
+
+    
+    {
+        let mut tm = crate::interrupts::task::TASK_MANAGER.int_lock();
+        
+        tm.init_user_task(pid_idx, 0, 0, args, Some(new_fd_table), process_name_bytes, term_size).map_err(|_| String::from("Failed to init task"))?;
+    }
+
+    
+    let target_pml4_phys = {
+        let tm = crate::interrupts::task::TASK_MANAGER.int_lock();
+        tm.tasks[pid_idx].pml4_phys
+    };
+
+    match crate::fs::elf::load_elf(&file_buf, target_pml4_phys, pid) {
+        Ok(entry_point) => {
+            
+            let mut tm = crate::interrupts::task::TASK_MANAGER.int_lock();
+            let task = &mut tm.tasks[pid_idx];
+            
+            
+            unsafe {
+                let cpu_state = &mut *(task.cpu_state_ptr as *mut crate::interrupts::task::CPUState);
+                cpu_state.rip = entry_point;
+            }
+            
+            Ok(pid)
+        }
         Err(e) => {
+            
+            crate::interrupts::task::TASK_MANAGER.lock().kill_process(pid);
             Err(e)
         }
     }
@@ -160,7 +173,7 @@ pub fn handle_spawn(context: &mut CPUState) {
     let path_slice = unsafe { core::slice::from_raw_parts(path_ptr, path_len) };
     let path_str = String::from_utf8_lossy(path_slice);
 
-    // Parse args
+    
     let mut args_vec = Vec::new();
     if !args_ptr.is_null() && args_len > 0 {
         let args_ptrs = unsafe { core::slice::from_raw_parts(args_ptr, args_len) };

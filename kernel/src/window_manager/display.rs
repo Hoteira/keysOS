@@ -15,6 +15,8 @@ pub struct DisplayServer {
 
     pub buffer1_phys: u64,
     pub buffer2_phys: u64,
+    pub buffer1_virt: u64,
+    pub buffer2_virt: u64,
     pub active_resource_id: u32,
 }
 
@@ -27,6 +29,8 @@ pub static mut DISPLAY_SERVER: DisplayServer = DisplayServer {
     double_buffer: 0,
     buffer1_phys: 0,
     buffer2_phys: 0,
+    buffer1_virt: 0,
+    buffer2_virt: 0,
     active_resource_id: 1,
 };
 
@@ -59,18 +63,22 @@ impl DisplayServer {
                 let b1 = crate::memory::pmm::allocate_frames(pages, 0).expect("Failed to allocate buffer 1");
                 let b2 = crate::memory::pmm::allocate_frames(pages, 0).expect("Failed to allocate buffer 2");
 
-                core::ptr::write_bytes(b1 as *mut u8, 0, size_bytes);
-                core::ptr::write_bytes(b2 as *mut u8, 0, size_bytes);
+                
+                let b1_virt = crate::memory::vmm::map_mmio(b1, size_bytes);
+                let b2_virt = crate::memory::vmm::map_mmio(b2, size_bytes);
+
+                core::ptr::write_bytes(b1_virt as *mut u8, 0, size_bytes);
+                core::ptr::write_bytes(b2_virt as *mut u8, 0, size_bytes);
 
                 self.buffer1_phys = b1;
                 self.buffer2_phys = b2;
+                self.buffer1_virt = b1_virt;
+                self.buffer2_virt = b2_virt;
 
-
-                self.framebuffer = b1;
+                self.framebuffer = b1_virt;
                 self.active_resource_id = 1;
 
-
-                self.double_buffer = b2;
+                self.double_buffer = b2_virt;
 
                 virtio::start_gpu(self.width as u32, self.height as u32, self.buffer1_phys, self.buffer2_phys);
 
@@ -83,7 +91,7 @@ impl DisplayServer {
                 let cursor_size_bytes = (CURSOR_WIDTH * CURSOR_HEIGHT * 4) as usize;
                 let cursor_pages = (cursor_size_bytes + 4095) / 4096;
                 if let Some(cursor_phys) = crate::memory::pmm::allocate_frames(cursor_pages, 0) {
-                    let cursor_ptr = cursor_phys as *mut u32;
+                    let cursor_ptr = (cursor_phys + crate::memory::paging::HHDM_OFFSET) as *mut u32;
 
                     for i in 0..CURSOR_BUFFER.len() {
                         *cursor_ptr.add(i) = CURSOR_BUFFER[i];
@@ -111,14 +119,18 @@ impl DisplayServer {
         self.height = vbe.height as u64;
         self.depth = 32;
 
-
         let size_bytes = self.pitch as usize * self.height as usize;
+        
+        unsafe {
+            self.framebuffer = crate::memory::vmm::map_mmio(vbe.framebuffer as u64, size_bytes);
+        }
+
         let pages = (size_bytes + 4095) / 4096;
 
         unsafe {
             if let Some(buffer) = crate::memory::pmm::allocate_frames(pages, 0) {
-                self.double_buffer = buffer;
-                core::ptr::write_bytes(buffer as *mut u8, 0, size_bytes);
+                self.double_buffer = buffer + crate::memory::paging::HHDM_OFFSET;
+                core::ptr::write_bytes(self.double_buffer as *mut u8, 0, size_bytes);
             } else {
                 panic!("[DisplayServer] Failed to allocate double buffer!");
             }
@@ -129,8 +141,8 @@ impl DisplayServer {
         unsafe {
             if VIRTIO_ACTIVE {
                 let next_resource = if self.active_resource_id == 1 { 2 } else { 1 };
-                let next_buffer = if self.active_resource_id == 1 { self.buffer2_phys } else { self.buffer1_phys };
-                let current_buffer = if self.active_resource_id == 1 { self.buffer1_phys } else { self.buffer2_phys };
+                let next_buffer_virt = if self.active_resource_id == 1 { self.buffer2_virt } else { self.buffer1_virt };
+                let current_buffer_virt = if self.active_resource_id == 1 { self.buffer1_virt } else { self.buffer2_virt };
 
 
                 virtio::transfer_and_flush(next_resource, self.width as u32, self.height as u32);
@@ -142,8 +154,8 @@ impl DisplayServer {
                 self.active_resource_id = next_resource;
 
 
-                self.framebuffer = next_buffer;
-                self.double_buffer = current_buffer;
+                self.framebuffer = next_buffer_virt;
+                self.double_buffer = current_buffer_virt;
 
 
                 let size_bytes = (self.pitch * self.height) as usize;
@@ -687,11 +699,11 @@ impl DisplayServer {
                 let is_top_or_bottom = (src_off_y + row) == 0 || (src_off_y + row) == (height as usize - 1);
 
                 if !treat_as_transparent && !is_top_or_bottom {
-                    // Fast path for opaque content (middle rows)
+                    
                     let mut start_col = 0;
                     let mut end_col = copy_width;
 
-                    // Handle Left Border Pixel
+                    
                     if src_off_x == 0 && copy_width > 0 {
                         if let Some(color) = border_color {
                             *dst_row_ptr.add(0) = color;
@@ -701,7 +713,7 @@ impl DisplayServer {
                         start_col = 1;
                     }
 
-                    // Handle Right Border Pixel
+                    
                     if (src_off_x + copy_width) == (width as usize) && copy_width > start_col {
                         if let Some(color) = border_color {
                             *dst_row_ptr.add(copy_width - 1) = color;
@@ -711,7 +723,7 @@ impl DisplayServer {
                         end_col = copy_width - 1;
                     }
 
-                    // Bulk Copy
+                    
                     if end_col > start_col {
                         core::ptr::copy_nonoverlapping(
                             src_row_ptr.add(start_col),
@@ -849,9 +861,14 @@ impl DisplayServer {
     }
 
     pub fn present_rect(&self, x: i32, y: i32, w: u32, h: u32) {
-        let sx = x.max(0) as u32;
+        
+        
+        
+        
+        let sx = 0; 
+        let sw = self.width as u32;
+        
         let sy = y.max(0) as u32;
-        let sw = w.min((self.width as u32).saturating_sub(sx));
         let sh = h.min((self.height as u32).saturating_sub(sy));
 
         if sw == 0 || sh == 0 { return; }
@@ -864,25 +881,20 @@ impl DisplayServer {
                 let dst = self.framebuffer as *mut u8;
                 let fb_len = (self.pitch * self.height) as usize;
 
-                if sx == 0 && sw == self.width as u32 {
-                    // Contiguous copy for full-width updates
-                    let offset = sy as usize * pitch;
-                    let size = sh as usize * pitch;
+                
+                for row in 0..sh {
+                    
+                    let offset = (sy + row) as usize * pitch;
+                    
+                    
+                    let size = pitch;
+
                     if offset + size <= fb_len {
                         core::ptr::copy_nonoverlapping(src.add(offset), dst.add(offset), size);
                     }
-                } else {
-                    for row in 0..sh {
-                        let offset = (sy + row) as usize * pitch + sx as usize * bpp;
-                        let end_offset = offset + (sw * bpp as u32) as usize;
-
-                        if end_offset <= fb_len {
-                            core::ptr::copy_nonoverlapping(src.add(offset), dst.add(offset), (sw * bpp as u32) as usize);
-                        }
-                    }
                 }
 
-                // Draw mouse BEFORE flushing
+                
                 let mx = crate::window_manager::input::MOUSE.x;
                 let my = crate::window_manager::input::MOUSE.y;
                 use crate::drivers::periferics::mouse::{CURSOR_HEIGHT, CURSOR_WIDTH};
@@ -890,28 +902,23 @@ impl DisplayServer {
                 let mw = CURSOR_WIDTH as u32;
                 let mh = CURSOR_HEIGHT as u32;
 
-                let overlap_x = (mx as u32) < (sx + sw) && (mx as u32 + mw) > sx;
+                
                 let overlap_y = (my as u32) < (sy + sh) && (my as u32 + mh) > sy;
 
-                if overlap_x && overlap_y {
+                if overlap_y {
                     self.draw_mouse(mx, my, false);
                 }
 
+                
                 virtio::flush(sx, sy, sw, sh, self.width as u32, self.active_resource_id);
 
-                // If mouse sticks out, flush the rest?
-                if overlap_x && overlap_y {
-                    let mouse_inside = (mx as u32) >= sx && (mx as u32 + mw) <= (sx + sw) &&
-                        (my as u32) >= sy && (my as u32 + mh) <= (sy + sh);
-
-                    if !mouse_inside {
-                        virtio::flush(mx as u32, my as u32, mw, mh, self.width as u32, self.active_resource_id);
-                    }
-                }
+                
+                
+                
             } else {
                 self.copy_to_fb(x, y, w, h);
 
-                // Draw mouse for VBE/No-VirtIO case
+                
                 let mx = crate::window_manager::input::MOUSE.x;
                 let my = crate::window_manager::input::MOUSE.y;
                 use crate::drivers::periferics::mouse::{CURSOR_HEIGHT, CURSOR_WIDTH};

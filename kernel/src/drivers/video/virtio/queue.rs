@@ -3,7 +3,7 @@ use super::structs::*;
 use crate::debugln;
 use crate::memory::pmm;
 use core::ptr::{read_volatile, write_volatile};
-use std::memory::mmio::{read_16, write_16, write_64};
+use crate::memory::mmio::{read_16, write_16, write_64};
 
 pub struct VirtQueue {
     pub desc_phys: u64,
@@ -30,14 +30,20 @@ pub fn setup_queue(common_cfg: *mut u8, index: u16, notify_base: u64, notify_mul
         write_16(common_cfg.add(OFF_QUEUE_SIZE), size);
 
         if let Some(frame) = pmm::allocate_frame(0) {
-            core::ptr::write_bytes(frame as *mut u8, 0, 4096);
+            
+            let virt_frame = (frame + crate::memory::paging::HHDM_OFFSET) as *mut u8;
+            core::ptr::write_bytes(virt_frame, 0, 4096);
 
+            
+            
+            
+            
             let desc_addr = frame;
             let avail_addr = desc_addr + 2048;
-            let used_addr = (avail_addr + 262 + 3) & !3;
+            let used_addr = desc_addr + 3072;
 
-            let avail_ptr = avail_addr as *mut VirtqAvail;
-            (*avail_ptr).flags = 1;
+            let avail_ptr = (avail_addr + crate::memory::paging::HHDM_OFFSET) as *mut VirtqAvail;
+            (*avail_ptr).flags = 1; 
 
             write_64(common_cfg.add(OFF_QUEUE_DESC), desc_addr);
             write_64(common_cfg.add(OFF_QUEUE_DRIVER), avail_addr);
@@ -47,7 +53,6 @@ pub fn setup_queue(common_cfg: *mut u8, index: u16, notify_base: u64, notify_mul
             let notify_addr = notify_base + (notify_off as u64 * notify_multiplier as u64);
 
             write_16(common_cfg.add(OFF_QUEUE_ENABLE), 1);
-
 
             let enabled = read_16(common_cfg.add(OFF_QUEUE_ENABLE));
             if enabled != 1 {
@@ -66,7 +71,7 @@ pub fn setup_queue(common_cfg: *mut u8, index: u16, notify_base: u64, notify_mul
                 notify_addr,
             });
 
-            debugln!("VirtIO GPU: Queue {} setup at phys {:#x}. Notify Off: {}, Addr: {:#x}", index, frame, notify_off, notify_addr);
+            debugln!("VirtIO GPU: Queue {} setup at phys {:#x}. Notify Addr: {:#x}", index, frame, notify_addr);
         }
     }
 }
@@ -94,9 +99,11 @@ pub fn send_command_queue(queue_idx: usize, out_phys: &[u64], out_lens: &[u32], 
         let num_usize = vq.num as usize;
         let mut current_desc_idx = free_head_usize;
 
+        
+        let virt_desc_base = (vq.desc_phys + crate::memory::paging::HHDM_OFFSET) as *mut VirtqDesc;
 
         for i in 0..out_phys.len() {
-            *(vq.desc_phys as *mut VirtqDesc).add(current_desc_idx) = VirtqDesc {
+            *(virt_desc_base).add(current_desc_idx) = VirtqDesc {
                 addr: out_phys[i],
                 len: out_lens[i],
                 flags: if i == out_phys.len() - 1 && in_phys.len() == 0 { 0 } else { 1 },
@@ -105,22 +112,23 @@ pub fn send_command_queue(queue_idx: usize, out_phys: &[u64], out_lens: &[u32], 
             current_desc_idx = (current_desc_idx + 1) % num_usize;
         }
 
-
         for i in 0..in_phys.len() {
-            *(vq.desc_phys as *mut VirtqDesc).add(current_desc_idx) = VirtqDesc {
+            let flags = 2 | (if i == in_phys.len() - 1 { 0 } else { 1 }); 
+            *(virt_desc_base).add(current_desc_idx) = VirtqDesc {
                 addr: in_phys[i],
                 len: in_lens[i],
-                flags: 2 | (if i == in_phys.len() - 1 { 0 } else { 1 }),
+                flags,
                 next: ((current_desc_idx + 1) % num_usize) as u16,
             };
             current_desc_idx = (current_desc_idx + 1) % num_usize;
         }
 
+        let last_idx = (free_head_usize + total_descs - 1) % num_usize;
+        let last_desc = (virt_desc_base).add(last_idx);
+        (*last_desc).next = 0;
+        (*last_desc).flags &= !1; 
 
-        let last_desc_idx = (free_head_usize + total_descs - 1) % num_usize;
-        (*(vq.desc_phys as *mut VirtqDesc).add(last_desc_idx)).next = 0;
-
-        let avail_ptr = vq.avail_phys as *mut VirtqAvail;
+        let avail_ptr = (vq.avail_phys + crate::memory::paging::HHDM_OFFSET) as *mut VirtqAvail;
         let idx = (*avail_ptr).idx;
         (*avail_ptr).ring[(idx % vq.num) as usize] = vq.free_head;
 
@@ -136,7 +144,7 @@ pub fn send_command_queue(queue_idx: usize, out_phys: &[u64], out_lens: &[u32], 
             return true;
         }
 
-        let used_ptr = vq.used_phys as *mut VirtqUsed;
+        let used_ptr = (vq.used_phys + crate::memory::paging::HHDM_OFFSET) as *mut VirtqUsed;
         let mut timeout = 10_000_000;
         let mut success = false;
 

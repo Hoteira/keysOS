@@ -5,18 +5,18 @@ use core::arch::naked_asm;
 #[unsafe(naked)]
 pub unsafe extern "C" fn _start() -> ! {
     naked_asm!(
-        "xor rbp, rbp",      // Mark outermost frame
-        "mov rdi, rsp",      // Original stack pointer (points to argc)
-        "and rsp, -16",      // 16-byte alignment
+        "xor rbp, rbp",      
+        "mov rdi, rsp",      
+        "and rsp, -16",      
         "call rust_start",
-        "1: hlt",            // Should not be reached
+        "1: hlt",            
         "jmp 1b",
     )
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn rust_start(stack: *const usize) -> ! {
-    let heap_size = 10 * 1024 * 1024; // 10 MiB
+    let heap_size = 10 * 1024 * 1024; 
     let heap_ptr = crate::memory::malloc(heap_size);
     if heap_ptr == 0 || heap_ptr == usize::MAX {
         crate::os::exit(1);

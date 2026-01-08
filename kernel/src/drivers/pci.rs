@@ -163,9 +163,9 @@ impl PciDevice {
         let bar_offset = 0x10 + (bar_index as u32 * 4);
         let bar_value = self.read_config_register(bar_offset);
 
-        // Allow 0 to be returned as a raw value, let caller decide if it is valid.
-        // But the original code returned None on 0.
-        // Let's keep get_bar behavior but add read_bar_raw.
+        
+        
+        
         if bar_value == 0 {
             return None;
         }
@@ -188,7 +188,7 @@ impl PciDevice {
         if bar_index > 5 { return; }
         let bar_offset = 0x10 + (bar_index as u32 * 4);
         
-        // Read current value to check type (32-bit vs 64-bit)
+        
         let current_val = self.read_config_register(bar_offset);
         let is_64bit = (current_val & 0x4) != 0;
 
@@ -197,7 +197,7 @@ impl PciDevice {
         outl(0xCFC, address);
 
         if is_64bit && bar_index < 5 {
-            // Write 0 to the upper 32 bits
+            
             let upper_offset = bar_offset + 4;
             let upper_config_addr = self.generate_config_address(upper_offset as u8);
             outl(0xCF8, upper_config_addr);

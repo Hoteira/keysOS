@@ -10,7 +10,7 @@ mod disk;
 const STACK_ADDR: u64 = 0xA00000;
 
 pub const NEXT_STAGE_LBA: u64 = 6144;
-pub const KERNEL_RAM: u32 = 0x10_0000;
+pub const KERNEL_RAM: u64 = 0xFFFFFFFF00100000;
 
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".start")]
@@ -32,10 +32,11 @@ pub extern "C" fn _start() -> ! {
         );
     }
 
+    debug("Stage 4 loaded.\n");
 
     unsafe {
         asm!(
-        "call {0:r}",
+        "call {0}",
         in(reg) KERNEL_RAM,
         in("rdi") rdi,
         options(nostack),

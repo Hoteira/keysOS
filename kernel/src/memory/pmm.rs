@@ -20,7 +20,7 @@ pub struct FrameAllocation {
     pub used: bool,
 }
 
-const MAX_ALLOCS: usize = 4096;
+const MAX_ALLOCS: usize = 32768;
 
 pub struct StructPmm {
     allocations: [FrameAllocation; MAX_ALLOCS],
@@ -85,6 +85,48 @@ unsafe fn add_allocation(pid: u64, start: PhysAddr, count: usize) -> bool {
             idx += 1;
         }
 
+        
+        if idx > 0 {
+            let prev_idx = idx - 1;
+            let prev = &mut (*pmm_ptr).allocations[prev_idx];
+            if prev.pid == pid {
+                let prev_end = prev.start + (prev.count as u64 * PAGE_SIZE);
+                if prev_end == start {
+                    
+                    prev.count += count;
+                    
+                    if idx < count_used {
+                        let next = &(*pmm_ptr).allocations[idx];
+                        let current_end = prev.start + (prev.count as u64 * PAGE_SIZE);
+                        if next.pid == pid && current_end == next.start {
+                            prev.count += next.count;
+                            
+                            for i in idx..(count_used - 1) {
+                                (*pmm_ptr).allocations[i] = (*pmm_ptr).allocations[i + 1];
+                            }
+                            (*pmm_ptr).allocations[count_used - 1].used = false;
+                        }
+                    }
+                    return true;
+                }
+            }
+        }
+
+        
+        if idx < count_used {
+            let next = &mut (*pmm_ptr).allocations[idx];
+            if next.pid == pid {
+                let current_end = start + (count as u64 * PAGE_SIZE);
+                if current_end == next.start {
+                    
+                    next.start = start;
+                    next.count += count;
+                    return true;
+                }
+            }
+        }
+
+        
         if idx < count_used {
             for i in (idx..count_used).rev() {
                 (*pmm_ptr).allocations[i + 1] = (*pmm_ptr).allocations[i];
@@ -123,9 +165,9 @@ unsafe fn remove_allocation(start: PhysAddr) {
             let start_addr = (*pmm_ptr).allocations[found_idx].start;
             let size = (*pmm_ptr).allocations[found_idx].count as u64 * PAGE_SIZE;
             
-            // Note: We still write bytes here using physical address as pointer
-            // This works because of identity mapping.
-            core::ptr::write_bytes(start_addr.as_u64() as *mut u8, 0, size as usize);
+            
+            let virt_ptr = (start_addr.as_u64() + crate::memory::paging::HHDM_OFFSET) as *mut u8;
+            core::ptr::write_bytes(virt_ptr, 0, size as usize);
 
             for i in found_idx..(count_used - 1) {
                 (*pmm_ptr).allocations[i] = (*pmm_ptr).allocations[i + 1];
@@ -260,13 +302,13 @@ pub fn allocate_memory(bytes: usize, pid: u64) -> Option<u64> {
                     let entry_base = PhysAddr::new(entry.base);
                     let entry_end = entry_base + entry.length;
                     
-                    // If the region ends before our search start point, skip it.
+                    
                     if entry_end <= prev_end { continue; }
 
-                    // We can start at the beginning of the region, or at prev_end, whichever is higher.
+                    
                     let mut candidate_start = if entry_base > prev_end { entry_base } else { prev_end };
                     
-                    // Ensure page alignment (4KB)
+                    
                     if !candidate_start.is_aligned(PAGE_SIZE) {
                         candidate_start = candidate_start.align_up(PAGE_SIZE);
                     }
@@ -285,8 +327,9 @@ pub fn allocate_memory(bytes: usize, pid: u64) -> Option<u64> {
 
         if found {
             if add_allocation(pid, found_addr, pages) {
-                // ZERO THE ALLOCATED MEMORY
-                core::ptr::write_bytes(found_addr.as_u64() as *mut u8, 0, pages * PAGE_SIZE as usize);
+                
+                let virt_ptr = (found_addr.as_u64() + crate::memory::paging::HHDM_OFFSET) as *mut u8;
+                core::ptr::write_bytes(virt_ptr, 0, pages * PAGE_SIZE as usize);
 
                 unlock_pmm();
                 return Some(found_addr.as_u64());
@@ -312,7 +355,8 @@ pub fn reserve_frames(addr: u64, count: usize) -> bool {
         }
         let res = add_allocation(0, PhysAddr::new(addr), count);
         if res {
-            core::ptr::write_bytes(addr as *mut u8, 0, count * PAGE_SIZE as usize);
+            let virt_ptr = (addr + crate::memory::paging::HHDM_OFFSET) as *mut u8;
+            core::ptr::write_bytes(virt_ptr, 0, count * PAGE_SIZE as usize);
         }
         unlock_pmm();
         res
@@ -351,7 +395,8 @@ pub fn free_frames_by_pid(pid: u64) {
                 if should_free {
                     let start_addr = (*pmm_ptr).allocations[i].start;
                     let size = (*pmm_ptr).allocations[i].count as u64 * PAGE_SIZE;
-                    core::ptr::write_bytes(start_addr.as_u64() as *mut u8, 0, size as usize);
+                    let virt_ptr = (start_addr.as_u64() + crate::memory::paging::HHDM_OFFSET) as *mut u8;
+                    core::ptr::write_bytes(virt_ptr, 0, size as usize);
 
                     let count_used = {
                         let mut c = 0;

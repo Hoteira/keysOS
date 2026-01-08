@@ -3,7 +3,6 @@ set CC=clang
 set AR=llvm-ar
 
 cd swiftboot
-
 cargo compile
 
 cd ..

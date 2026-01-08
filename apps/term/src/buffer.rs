@@ -12,12 +12,12 @@ pub struct TerminalBuffer {
     pub cursor_col: usize,
     pub cursor_visible: bool,
 
-    // Current SGR state
+    
     pub current_fg: u8,
     pub current_bg: u8,
     pub current_bold: bool,
 
-    // Partial input buffer
+    
     pub input_buffer: Vec<u8>,
 }
 
@@ -124,7 +124,7 @@ impl TerminalBuffer {
                 49 => self.current_bg = 255,
                 90..=97 => self.current_fg = n - 90 + 8,
                 100..=107 => self.current_bg = n - 100 + 8,
-                _ => {} // Ignore unsupported for now
+                _ => {} 
             }
         }
     }
@@ -137,10 +137,10 @@ impl TerminalBuffer {
         let mut last_bg = 255;
         let mut last_bold = false;
 
-        // Reset at start
+        
         s.push_str("\x1B[0m");
 
-        // Determine effective height (max of lines.len() and cursor_row + 1)
+        
         let max_row = current.len().max(if self.cursor_visible { self.cursor_row + 1 } else { 0 });
 
         for i in 0..max_row {
@@ -148,12 +148,12 @@ impl TerminalBuffer {
                 s.push('\n'); 
             }
             
-            // Get line if exists, else empty slice
+            
             let empty_line = Vec::new();
             let line = if i < current.len() { &current[i] } else { &empty_line };
 
-            // Determine effective width for this line
-            // If this is cursor row, extend to cursor_col
+            
+            
             let line_len = line.len();
             let mut max_col = line_len;
             if self.cursor_visible && i == self.cursor_row {
@@ -161,27 +161,27 @@ impl TerminalBuffer {
             }
 
             for j in 0..max_col {
-                // Determine cell to render
+                
                 let mut cell = if j < line_len { line[j] } else { Cell::default() };
                 
-                // Override if cursor
+                
                 if self.cursor_visible && i == self.cursor_row && j == self.cursor_col {
-                    // User requested slightly vertically shorter version.
-                    // U+2587: ▆ (Lower seven eighths block)
+                    
+                    
                     cell.c = '▆';
                 }
 
-                // Update Bold
+                
                 if cell.bold != last_bold {
                     if cell.bold {
                         s.push_str("\x1B[1m");
                     } else {
-                        s.push_str("\x1B[22m"); // Normal intensity
+                        s.push_str("\x1B[22m"); 
                     }
                     last_bold = cell.bold;
                 }
 
-                // Update FG
+                
                 if cell.fg != last_fg {
                     if cell.fg == 255 {
                         s.push_str("\x1B[39m");
@@ -197,7 +197,7 @@ impl TerminalBuffer {
                     last_fg = cell.fg;
                 }
 
-                // Update BG
+                
                 if cell.bg != last_bg {
                     if cell.bg == 255 {
                         s.push_str("\x1B[49m");

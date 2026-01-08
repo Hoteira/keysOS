@@ -3,8 +3,9 @@ use core::fmt;
 use core::ops::{BitOr, BitOrAssign, BitAnd, BitAndAssign, Not, Index, IndexMut};
 
 pub const PAGE_SIZE: u64 = 4096;
+pub const HHDM_OFFSET: u64 = 0xFFFF800000000000;
 
-// Legacy constants for compatibility with existing vmm.rs/elf.rs
+
 pub const PAGE_PRESENT: u64 = 1 << 0;
 pub const PAGE_WRITABLE: u64 = 1 << 1;
 pub const PAGE_USER: u64 = 1 << 2;
@@ -131,7 +132,7 @@ impl PageTableEntry {
         self.entry = self.addr().as_u64() | flags.bits();
     }
     
-    // Legacy helper for existing vmm.rs
+    
     pub fn as_u64(&self) -> u64 {
         self.entry
     }
@@ -172,24 +173,75 @@ impl IndexMut<usize> for PageTable {
     }
 }
 
-// Helper functions for vmm.rs (Identity Map Era)
+
 pub fn active_level_4_table() -> &'static mut PageTable {
     unsafe {
         let cr3: u64;
         core::arch::asm!("mov {}, cr3", out(reg) cr3);
         let phys = cr3 & 0x000F_FFFF_FFFF_F000;
-        &mut *(phys as *mut PageTable)
+        let virt = phys_to_virt(PhysAddr::new(phys));
+        &mut *(virt.as_mut_ptr() as *mut PageTable)
     }
 }
 
 pub fn get_table_from_phys(phys: u64) -> Option<&'static mut PageTable> {
     if phys == 0 { return None; }
     unsafe {
-        Some(&mut *(phys as *mut PageTable))
+        let virt = phys_to_virt(PhysAddr::new(phys));
+        Some(&mut *(virt.as_mut_ptr() as *mut PageTable))
     }
 }
 
 pub fn phys_to_virt(phys: PhysAddr) -> super::address::VirtAddr {
-    // TODO: Phase 4 - Add HHDM_OFFSET here
-    super::address::VirtAddr::new(phys.as_u64())
+    super::address::VirtAddr::new(phys.as_u64() + HHDM_OFFSET)
+}
+
+pub fn virt_to_phys(virt: u64) -> u64 {
+    if virt >= 0xFFFFFFFF00000000 {
+        
+        virt - 0xFFFFFFFF00000000
+    } else if virt >= HHDM_OFFSET {
+        
+        virt - HHDM_OFFSET
+    } else {
+        
+        let cr3: u64;
+        unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3); }
+        let pml4_phys = cr3 & 0x000F_FFFF_FFFF_F000;
+        
+        unsafe {
+            let pml4_virt = phys_to_virt(PhysAddr::new(pml4_phys));
+            let pml4 = &*(pml4_virt.as_ptr() as *const PageTable);
+
+            let p4_idx = (virt >> 39) & 0x1FF;
+            let p3_idx = (virt >> 30) & 0x1FF;
+            let p2_idx = (virt >> 21) & 0x1FF;
+            let p1_idx = (virt >> 12) & 0x1FF;
+
+            let p3_entry = pml4[p4_idx as usize];
+            if p3_entry.is_unused() { return virt; } 
+            
+            let p3 = &*(phys_to_virt(p3_entry.addr()).as_ptr() as *const PageTable);
+            let p2_entry = p3[p3_idx as usize];
+            if p2_entry.is_unused() { return virt; }
+            
+            if (p2_entry.as_u64() & PAGE_HUGE) != 0 {
+                return p2_entry.addr().as_u64() + (virt & 0x3FFFFFFF);
+            }
+
+            let p2 = &*(phys_to_virt(p2_entry.addr()).as_ptr() as *const PageTable);
+            let p1_entry = p2[p2_idx as usize];
+            if p1_entry.is_unused() { return virt; }
+            
+            if (p1_entry.as_u64() & PAGE_HUGE) != 0 {
+                return p1_entry.addr().as_u64() + (virt & 0x1FFFFF);
+            }
+
+            let p1 = &*(phys_to_virt(p1_entry.addr()).as_ptr() as *const PageTable);
+            let final_entry = p1[p1_idx as usize];
+            if final_entry.is_unused() { return virt; }
+            
+            final_entry.addr().as_u64() + (virt & 0xFFF)
+        }
+    }
 }

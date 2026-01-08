@@ -150,10 +150,10 @@ pub unsafe extern "C" fn krake_window_draw(wid: usize) {
     krake_syscall(102, &w as *const _ as u64, 0, 0, 0);
 }
 
-// --- SIGNAL STUBS ---
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn kill(pid: c_int, sig: c_int) -> c_int {
-    // Syscall 62 is kill(pid, sig) in kernel
+    
     if sig == 9 {
         krake_syscall(62, pid as u64, 9, 0, 0) as c_int
     } else {

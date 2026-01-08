@@ -4,7 +4,6 @@ use core::arch::naked_asm;
 
 pub mod fs;
 pub use process::spawn_process;
-use std::println;
 
 pub mod process;
 pub mod memory;
@@ -19,6 +18,9 @@ pub const SYS_STAT: u64 = 4;
 pub const SYS_FSTAT: u64 = 5;
 pub const SYS_POLL: u64 = 7;
 pub const SYS_LSEEK: u64 = 8;
+pub const SYS_MMAP: u64 = 9;
+pub const SYS_MUNMAP: u64 = 11;
+pub const SYS_BRK: u64 = 12;
 pub const SYS_IOCTL: u64 = 16;
 pub const SYS_PIPE: u64 = 22;
 pub const SYS_NANOSLEEP: u64 = 35;
@@ -35,7 +37,7 @@ pub const SYS_RMDIR: u64 = 84;
 pub const SYS_CREATE: u64 = 85;
 pub const SYS_UNLINK: u64 = 87;
 
-// KrakeOS Custom
+
 pub const SYS_ADD_WINDOW: u64 = 100;
 pub const SYS_REMOVE_WINDOW: u64 = 101;
 pub const SYS_UPDATE_WINDOW: u64 = 102;
@@ -48,10 +50,9 @@ pub const SYS_GET_TIME: u64 = 108;
 pub const SYS_GET_TICKS: u64 = 109;
 pub const SYS_GET_PROCESS_LIST: u64 = 110;
 pub const SYS_GET_PROCESS_MEM: u64 = 111;
-pub const SYS_MALLOC: u64 = 112;
-pub const SYS_FREE: u64 = 113;
+
 pub const SYS_SPAWN_EXT: u64 = 114;
-pub const SYS_DEBUG_PRINT: u64 = 9;
+pub const SYS_DEBUG_PRINT: u64 = 999; 
 pub const SYS_MOUNT: u64 = 165;
 
 #[unsafe(naked)]
@@ -59,15 +60,15 @@ pub const SYS_MOUNT: u64 = 165;
 pub extern "C" fn syscall_entry() {
     unsafe {
         naked_asm!(
-            "mov [{scratch}], r15",
+            "mov [rip + {scratch}], r15",
             "mov r15, rsp",
-            "mov rsp, [{kernel_stack_ptr}]",
+            "mov rsp, [rip + {kernel_stack_ptr}]",
             "push QWORD PTR 0x23", 
             "push r15",
             "push r11",
             "push QWORD PTR 0x33", 
             "push rcx",
-            "mov r15, [{scratch}]",
+            "mov r15, [rip + {scratch}]",
             "push rbp",
             "push rax",
             "push rbx",
@@ -123,6 +124,9 @@ pub extern "C" fn syscall_dispatcher(context: &mut CPUState) {
         SYS_FSTAT => fs::handle_file_size(context),
         SYS_POLL => fs::handle_poll(context),
         SYS_LSEEK => fs::handle_seek(context),
+        SYS_MMAP => memory::handle_mmap(context),
+        SYS_MUNMAP => memory::handle_munmap(context),
+        SYS_BRK => memory::handle_brk(context),
         SYS_IOCTL => fs::handle_ioctl(context),
         SYS_PIPE => fs::handle_pipe(context),
         SYS_NANOSLEEP => process::handle_sleep(context),
@@ -149,15 +153,10 @@ pub extern "C" fn syscall_dispatcher(context: &mut CPUState) {
         SYS_GET_TICKS => misc::handle_ticks(context),
         SYS_GET_PROCESS_LIST => process::handle_get_process_list(context),
         SYS_GET_PROCESS_MEM => memory::handle_get_process_mem(context),
-        SYS_MALLOC => memory::handle_malloc(context),
-        SYS_FREE => memory::handle_free(context),
+        
         SYS_DEBUG_PRINT => misc::handle_debug_print(context),
         SYS_MOUNT => {
-            context.rax = 0; // Stub
-        }
-
-        10 | 11 | 12 => {
-            context.rax = 0;
+            context.rax = 0; 
         }
 
         _ => {

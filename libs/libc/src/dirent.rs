@@ -36,10 +36,10 @@ pub unsafe extern "C" fn readdir(dirp: *mut DIR) -> *mut dirent {
     let dir = &mut *dirp;
 
     if let Some(entry) = dir.iter.next() {
-        // Reset d_name
+        
         for i in 0..256 { dir.current.d_name[i] = 0; }
 
-        // Copy name
+        
         let name_bytes = entry.name.as_bytes();
         let len = core::cmp::min(name_bytes.len(), 255);
         for i in 0..len {
@@ -48,8 +48,8 @@ pub unsafe extern "C" fn readdir(dirp: *mut DIR) -> *mut dirent {
         dir.current.d_name[len] = 0;
 
         dir.current.d_type = match entry.file_type {
-            std::fs::FileType::Directory => 4, // DT_DIR
-            std::fs::FileType::File => 8, // DT_REG
+            std::fs::FileType::Directory => 4, 
+            std::fs::FileType::File => 8, 
             _ => 0,
         };
 

@@ -155,7 +155,7 @@ fn protected_mode() {
         (*(&raw mut GDT)).load();
 
 
-        //BOOT.rsdp = get_rsdp();
+        
         BOOT.vbe = get_vbe_info();
         BOOT.tss = tss_addr;
         get_mmap();

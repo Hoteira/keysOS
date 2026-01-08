@@ -67,7 +67,7 @@ pub fn execute_builtin(cmd: &str, args: &[String], cwd: &mut String, path_env: &
         
         let mut os_line = String::from(p_cyan);
         os_line.push(' ');
-        os_line.push(core::char::from_u32(0xF300).unwrap_or('?')); // Linux icon
+        os_line.push(core::char::from_u32(0xF300).unwrap_or('?')); 
         os_line.push_str(" OS: ");
         os_line.push_str(white);
         os_line.push_str("KrakeOS");

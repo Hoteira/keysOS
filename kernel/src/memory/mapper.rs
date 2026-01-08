@@ -45,9 +45,9 @@ impl Mapper {
 
         if entry.is_unused() {
             let frame = pmm::allocate_frame(0).ok_or("OOM: Failed to allocate page table")?;
-            // Determine flags for the directory entry.
-            // Usually, we want intermediate tables to be very permissive (User + Writable),
-            // so that the final leaf entry controls the actual permissions.
+            
+            
+            
             let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE;
             
             entry.set_addr(PhysAddr::new(frame), flags);

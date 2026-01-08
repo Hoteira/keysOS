@@ -26,9 +26,9 @@ pub fn setup_cursor(phys_ptr: u64, width: u32, height: u32, x: u32, y: u32) {
 
     send_command_queue(
         0,
-        &[&req_create as *const _ as u64],
+        &[crate::memory::paging::virt_to_phys(&req_create as *const _ as u64)],
         &[core::mem::size_of_val(&req_create) as u32],
-        &[&resp_create as *const _ as u64],
+        &[crate::memory::paging::virt_to_phys(&resp_create as *const _ as u64)],
         &[core::mem::size_of_val(&resp_create) as u32],
         true,
     );

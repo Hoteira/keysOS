@@ -31,12 +31,24 @@ pub(crate) fn setup_paging(fb_addr: u64, fb_size: u64) {
 
 
         (*pml4).entries[0] = PDPT_ADDR | 0b111;
+        
+        
+        (*pml4).entries[256] = PDPT_ADDR | 0b111;
+
+        (*pml4).entries[511] = PDPT_ADDR | 0b111;
 
 
         (*pdpt).entries[0] = PD0_ADDR | 0b111;
         (*pdpt).entries[1] = PD1_ADDR | 0b111;
         (*pdpt).entries[2] = PD2_ADDR | 0b111;
         (*pdpt).entries[3] = PD3_ADDR | 0b111;
+
+        
+        
+        (*pdpt).entries[508] = PD0_ADDR | 0b111;
+        (*pdpt).entries[509] = PD1_ADDR | 0b111;
+        (*pdpt).entries[510] = PD2_ADDR | 0b111;
+        (*pdpt).entries[511] = PD3_ADDR | 0b111;
 
 
         let fill_pd = |pd: *mut PageTable, start_phys: u64| {

@@ -14,15 +14,15 @@ pub unsafe extern "C" fn time(_t: *mut c_long) -> c_long { 0 }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn open(path: *const c_char, _flags: c_int, _mode: c_int) -> c_int {
     let path_str = core::ffi::CStr::from_ptr(path).to_string_lossy();
-    // Default to open existing. If fails, try create (simple fallback for write support)
+    
     if let Ok(f) = std::fs::File::open(&path_str) {
         let fd = f.as_raw_fd();
         core::mem::forget(f);
         fd as c_int
     } else {
-        // Try creating? If we assume this is a simple system, maybe fallback to create if open fails?
-        // But checking flags would be better.
-        // For now, let's just try create if open failed.
+        
+        
+        
         if let Ok(f) = std::fs::File::create(&path_str) {
             let fd = f.as_raw_fd();
             core::mem::forget(f);
@@ -110,7 +110,7 @@ pub unsafe extern "C" fn wait(status: *mut c_int) -> c_int {
 pub unsafe extern "C" fn waitpid(pid: c_int, status: *mut c_int, _options: c_int) -> c_int {
     let res = std::os::waitpid(pid as usize);
     if !status.is_null() {
-        *status = (res as c_int) << 8; // WEXITSTATUS
+        *status = (res as c_int) << 8; 
     }
     pid
 }

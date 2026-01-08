@@ -195,7 +195,7 @@ struct Stat {
     st_dev: u64,
     st_ino: u64,
     st_mode: u32,
-    _pad1: u32, // Alignment padding
+    _pad1: u32, 
     st_nlink: u64,
     st_uid: u32,
     st_gid: u32,
@@ -271,7 +271,7 @@ unsafe fn printf_core(mut output: impl FnMut(u8), fmt: *const c_char, args: &mut
 
         if *p == b'*' as c_char {
             let w = args.arg::<c_int>();
-            width = if w < 0 { 0 } else { w as usize }; // Handle negative as 0 for now (no left-align support yet)
+            width = if w < 0 { 0 } else { w as usize }; 
             p = p.add(1);
         } else {
             while *p >= b'0' as c_char && *p <= b'9' as c_char {

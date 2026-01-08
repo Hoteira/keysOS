@@ -34,10 +34,16 @@ impl<T> Mutex<T> {
 
     pub fn int_lock(&self) -> IntMutexGuard<'_, T> {
         let rflags: u64;
+        #[cfg(not(feature = "userland"))]
         unsafe {
             core::arch::asm!("pushfq; pop {}", out(reg) rflags);
             core::arch::asm!("cli");
         }
+        #[cfg(feature = "userland")]
+        {
+            rflags = 0;
+        }
+
         while self.lock.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
             core::hint::spin_loop();
         }
@@ -90,6 +96,7 @@ impl<'a, T> core::ops::DerefMut for IntMutexGuard<'a, T> {
 impl<'a, T> Drop for IntMutexGuard<'a, T> {
     fn drop(&mut self) {
         self.lock.store(false, Ordering::Release);
+        #[cfg(not(feature = "userland"))]
         unsafe {
             if (self.rflags & 0x200) != 0 {
                 core::arch::asm!("sti");

@@ -1,11 +1,10 @@
 use alloc::vec::Vec;
-use crate::memory::{paging, pmm};
+use crate::memory::{paging, pmm, vmm};
+use crate::memory::address::PhysAddr;
 use core::arch::{asm, naked_asm};
 
 pub(crate) const MAX_TASKS: usize = 128;
 const STACK_SIZE: u64 = 1024 * 1024;
-const KERNEL_STACK_SIZE: u64 = 1024 * 1024;
-
 
 #[derive(Copy, Clone, Debug)]
 #[repr(C, align(16))]
@@ -23,6 +22,9 @@ pub struct Task {
     pub cwd: [u8; 128],
     pub terminal_width: u16,
     pub terminal_height: u16,
+    pub heap_start: u64,
+    pub heap_end: u64,
+    pub _padding: [u8; 236],
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -75,6 +77,9 @@ pub(crate) static NULL_TASK: Task = Task {
     cwd: [0; 128],
     terminal_width: 80,
     terminal_height: 25,
+    heap_start: 0,
+    heap_end: 0,
+    _padding: [0; 236],
 };
 
 impl Task {
@@ -90,15 +95,15 @@ impl Task {
 
         self.terminal_width = 80;
         self.terminal_height = 25;
+        self.heap_start = 0;
+        self.heap_end = 0;
 
         self.cwd = [0; 128];
         let root = b"@0xE0/";
         self.cwd[..root.len()].copy_from_slice(root);
 
         self.fpu_state[0] = 0x7F;
-
         self.fpu_state[1] = 0x03;
-
         self.fpu_state[24] = 0x80;
         self.fpu_state[25] = 0x1F;
 
@@ -107,7 +112,8 @@ impl Task {
         }
 
         let stack_pages = (STACK_SIZE / 4096) as usize;
-        self.stack = pmm::allocate_frames(stack_pages, 0).expect("Task init: OOM");
+        let stack_phys = pmm::allocate_frames(stack_pages, 0).expect("Task init: OOM");
+        self.stack = stack_phys + crate::memory::paging::HHDM_OFFSET;
 
         let stack_top = self.stack + STACK_SIZE;
         self.kernel_stack = stack_top;
@@ -119,8 +125,6 @@ impl Task {
         unsafe {
             let mut current_sp = stack_top;
 
-            // Simple stack setup for kernel-spawned init task (no args usually)
-            // But we should at least push argc=0 if no args, or handle it like init_user
             let mut arg_ptrs = Vec::new();
             if let Some(a_list) = args {
                 let mut push_str = |s: &[u8]| {
@@ -138,9 +142,9 @@ impl Task {
 
             current_sp &= !7;
             current_sp -= 8;
-            *(current_sp as *mut u64) = 0; // envp
+            *(current_sp as *mut u64) = 0;
             current_sp -= 8;
-            *(current_sp as *mut u64) = 0; // argv end
+            *(current_sp as *mut u64) = 0;
             for &ptr in arg_ptrs.iter().rev() {
                 current_sp -= 8;
                 *(current_sp as *mut u64) = ptr;
@@ -157,14 +161,14 @@ impl Task {
             (*state_ptr).rbp = 0;
             (*state_ptr).rsp = current_sp;
             (*state_ptr).rip = entry_point;
-            (*state_ptr).cs = 0x28; // Kernel CS
+            (*state_ptr).cs = 0x28;
             (*state_ptr).rflags = 0x202;
-            (*state_ptr).ss = 0x10; // Kernel SS
+            (*state_ptr).ss = 0x10;
         }
     }
 
     #[allow(dead_code)]
-    pub fn init_user(&mut self, entry_point: u64, pml4_phys: u64, args: Option<&[&str]>, pid: u64, fd_table: Option<[i16; 16]>, name: &[u8], terminal_size: (u16, u16)) -> Result<(), pmm::FrameError> {
+    pub fn init_user(&mut self, entry_point: u64, _unused_pml4: u64, args: Option<&[&str]>, pid: u64, fd_table: Option<[i16; 16]>, name: &[u8], terminal_size: (u16, u16)) -> Result<(), pmm::FrameError> {
         self.fpu_state = [0; 512];
         self.fd_table = fd_table.unwrap_or([-1; 16]);
         self.exit_code = 0;
@@ -185,91 +189,94 @@ impl Task {
         self.fpu_state[24] = 0x80;
         self.fpu_state[25] = 0x1F;
 
-        self.pml4_phys = pml4_phys;
+        
+        let user_pml4_phys = unsafe { vmm::create_user_pml4().ok_or(pmm::FrameError::NoMemory)? };
+        self.pml4_phys = user_pml4_phys;
 
+        
+        let k_frame = pmm::allocate_frames(16, pid).ok_or(pmm::FrameError::NoMemory)?;
+        self.kernel_stack = k_frame + 4096 * 16 + paging::HHDM_OFFSET;
 
-        let k_frame = match pmm::allocate_frames(16, pid) {
-            Some(addr) => addr,
-            None => return Err(pmm::FrameError::NoMemory),
-        };
-        self.kernel_stack = k_frame + 4096 * 16;
-
+        
         let stack_pages = (STACK_SIZE / 4096) as usize;
-        let u_frame = match pmm::allocate_frames(stack_pages, pid) {
-            Some(addr) => addr,
-            None => {
-                pmm::free_frame(k_frame);
-                return Err(pmm::FrameError::NoMemory);
-            }
-        };
-        self.stack = u_frame;
+        let u_frame_phys = pmm::allocate_frames(stack_pages, pid).ok_or(pmm::FrameError::NoMemory)?;
 
-        let u_stack_top = u_frame + STACK_SIZE;
+        
+        let u_stack_virt = 0x0000_7FFF_FFFF_0000 - STACK_SIZE; 
+        for i in 0..stack_pages {
+            let offset = i as u64 * 4096;
+            vmm::map_page(u_stack_virt + offset, PhysAddr::new(u_frame_phys + offset), 
+                          paging::PAGE_PRESENT | paging::PAGE_WRITABLE | paging::PAGE_USER, 
+                          Some(self.pml4_phys));
+        }
 
+        self.stack = u_stack_virt + STACK_SIZE;
+
+        
         let state_size = core::mem::size_of::<CPUState>();
         let state_ptr = (self.kernel_stack - state_size as u64) as *mut CPUState;
         self.cpu_state_ptr = state_ptr as u64;
 
         unsafe {
-            // System V ABI Stack Setup:
-            // High Addresses
-            // [Strings: name, arg1, arg2, ...]
-            // [envp array: NULL]
-            // [argv array: name_ptr, arg1_ptr, arg2_ptr, ..., NULL]
-            // [argc] <- RSP
-            // Low Addresses
-
-            let mut current_sp = u_stack_top;
-
-            // 1. Copy strings and store their pointers
-            let mut arg_ptrs = Vec::new();
-
-            // Helper to push string to stack
-            let mut push_str = |s: &[u8]| {
-                let len = s.len();
-                current_sp -= (len + 1) as u64;
-                let ptr = current_sp as *mut u8;
-                core::ptr::copy_nonoverlapping(s.as_ptr(), ptr, len);
-                *ptr.add(len) = 0;
-                current_sp
+            
+            let stack_phys_base = u_frame_phys + paging::HHDM_OFFSET;
+            let mut current_virt_sp = self.stack;
+            
+            let mut write_stack = |data: &[u8]| -> u64 {
+                current_virt_sp -= data.len() as u64;
+                let offset = current_virt_sp - u_stack_virt;
+                let dest = (stack_phys_base + offset) as *mut u8;
+                core::ptr::copy_nonoverlapping(data.as_ptr(), dest, data.len());
+                
+                
+                current_virt_sp
             };
 
-            // Push name (argv[0])
+            let mut arg_ptrs = Vec::new();
+
+            
+            let mut push_str = |s: &[u8]| {
+                
+                let len = s.len() + 1;
+                current_virt_sp -= len as u64;
+                
+                let offset = current_virt_sp - u_stack_virt;
+                let dest = (stack_phys_base + offset) as *mut u8;
+                
+                core::ptr::copy_nonoverlapping(s.as_ptr(), dest, s.len());
+                *dest.add(s.len()) = 0; 
+                current_virt_sp
+            };
+
             let name_ptr = push_str(name);
             arg_ptrs.push(name_ptr);
 
-            // Push other args
             if let Some(a_list) = args {
                 for &a in a_list {
                     arg_ptrs.push(push_str(a.as_bytes()));
                 }
             }
 
-            // 2. Align for pointers
-            current_sp &= !7;
+            
+            current_virt_sp &= !15; 
 
-            // 3. Push envp (just NULL for now)
-            current_sp -= 8;
-            *(current_sp as *mut u64) = 0;
-            let _envp_ptr = current_sp;
+            
+            let mut push_u64 = |val: u64| {
+                current_virt_sp -= 8;
+                let offset = current_virt_sp - u_stack_virt;
+                let dest = (stack_phys_base + offset) as *mut u64;
+                *dest = val;
+            };
 
-            // 4. Push argv array (NULL terminated)
-            current_sp -= 8;
-            *(current_sp as *mut u64) = 0;
+            push_u64(0); 
+            push_u64(0); 
 
             for &ptr in arg_ptrs.iter().rev() {
-                current_sp -= 8;
-                *(current_sp as *mut u64) = ptr;
+                push_u64(ptr);
             }
-            let argv_ptr = current_sp;
 
-            // 5. Push argc
-            current_sp -= 8;
-            *(current_sp as *mut u64) = arg_ptrs.len() as u64;
+            push_u64(arg_ptrs.len() as u64); 
 
-            // Final RSP alignment check (must be 16-byte aligned before call)
-            // But _start does "and rsp, -16", so we just need to be roughly correct here.
-            
             (*state_ptr).rax = 0;
             (*state_ptr).rbx = 0;
             (*state_ptr).rcx = 0;
@@ -281,11 +288,13 @@ impl Task {
             (*state_ptr).rip = entry_point;
             (*state_ptr).cs = 0x33;
             (*state_ptr).rflags = 0x202;
-            (*state_ptr).rsp = current_sp; 
+            (*state_ptr).rsp = current_virt_sp;
             (*state_ptr).ss = 0x23;
         }
 
         self.state = TaskState::Ready;
+        self.heap_start = 0x40000000;
+        self.heap_end = 0x40000000;
         Ok(())
     }
 }
@@ -294,11 +303,6 @@ pub struct TaskManager {
     pub tasks: [Task; MAX_TASKS],
     task_count: usize,
     pub(crate) current_task: isize,
-}
-
-#[allow(dead_code)]
-pub struct LockedTaskManager {
-    inner: std::sync::Mutex<TaskManager>,
 }
 
 pub static TASK_MANAGER: std::sync::Mutex<TaskManager> =
@@ -565,7 +569,7 @@ unsafe fn common_switch(rsp: u64, is_timer: bool) -> u64 {
         if is_timer {
             SYSTEM_TICKS = SYSTEM_TICKS.wrapping_add(10);
         }
-        let mut tm = TASK_MANAGER.int_lock();
+        let mut tm = TASK_MANAGER.lock();
 
 
         if tm.current_task >= 0 {
@@ -575,7 +579,7 @@ unsafe fn common_switch(rsp: u64, is_timer: bool) -> u64 {
             asm!("fxsave [{}]", in(reg) fpu_ptr);
         }
 
-        let (new_state, k_stack, _pml4_phys) = tm.schedule(rsp as *mut CPUState);
+        let (new_state, k_stack, pml4_phys) = tm.schedule(rsp as *mut CPUState);
 
 
         if tm.current_task >= 0 {
@@ -588,6 +592,14 @@ unsafe fn common_switch(rsp: u64, is_timer: bool) -> u64 {
         if k_stack != 0 {
             crate::tss::set_tss(k_stack);
             KERNEL_STACK_PTR = k_stack;
+        }
+        
+        if pml4_phys != 0 {
+            let current_cr3: u64;
+            asm!("mov {}, cr3", out(reg) current_cr3);
+            if current_cr3 != pml4_phys {
+                asm!("mov cr3, {}", in(reg) pml4_phys);
+            }
         }
 
         if is_timer {
