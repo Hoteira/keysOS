@@ -719,16 +719,16 @@ impl Widget {
                     let img_h = geometry.height;
 
                     for row in 0..img_h {
-                        let dest_y = geometry.y + geometry.margin + row;
+                        let dest_y = geometry.y + row;
                         if dest_y >= framebuffer.len() / buffer_width {
                             std::println!("Image Draw: Clipped at bottom y={}", dest_y);
                             break;
                         }
 
-                        let dest_start = dest_y * buffer_width + (geometry.x + geometry.margin);
+                        let dest_start = dest_y * buffer_width + geometry.x;
                         let src_start = row * img_w;
 
-                        let copy_width = img_w.min(buffer_width.saturating_sub(geometry.x + geometry.margin));
+                        let copy_width = img_w.min(buffer_width.saturating_sub(geometry.x));
 
                         if dest_start + copy_width <= framebuffer.len() && src_start + copy_width <= rasterized_buffer.len() {
                             for i in 0..copy_width {
@@ -743,8 +743,8 @@ impl Widget {
                 crate::graphics::primitives::draw_background_style(
                     framebuffer,
                     buffer_width,
-                    geometry.x + geometry.margin,
-                    geometry.y + geometry.margin,
+                    geometry.x,
+                    geometry.y,
                     geometry.width,
                     geometry.height,
                     geometry.border_radius,
@@ -770,8 +770,8 @@ impl Widget {
                 crate::graphics::primitives::draw_background_style(
                     framebuffer,
                     buffer_width,
-                    geometry.x + geometry.margin,
-                    geometry.y + geometry.margin,
+                    geometry.x,
+                    geometry.y,
                     geometry.width,
                     geometry.height,
                     geometry.border_radius,
@@ -785,12 +785,12 @@ impl Widget {
 
                 if let Some(font) = font {
                     if !text.text.is_empty() {
-                        let text_y = geometry.y + geometry.margin + (geometry.height / 2) + (text.size as usize / 3);
+                        let text_y = geometry.y + (geometry.height / 2) + (text.size as usize / 3);
 
                         geometry.content_height = crate::graphics::primitives::draw_text_formatted(
                             framebuffer,
                             buffer_width,
-                            geometry.x + geometry.margin + geometry.padding + 5,
+                            geometry.x + geometry.padding + 5,
                             text_y,
                             &text.text,
                             font,
@@ -799,7 +799,7 @@ impl Widget {
                             geometry.width.saturating_sub(geometry.padding * 2),
                             geometry.scroll_offset_y,
                             geometry.height.saturating_sub(geometry.padding * 2),
-                            geometry.y + geometry.margin,
+                            geometry.y,
                         );
                     }
                 }
@@ -814,8 +814,8 @@ impl Widget {
                     crate::graphics::primitives::draw_background_style(
                         framebuffer,
                         buffer_width,
-                        geometry.x + geometry.margin,
-                        geometry.y + geometry.margin,
+                        geometry.x,
+                        geometry.y,
                         geometry.width,
                         geometry.height,
                         geometry.border_radius,
@@ -830,12 +830,12 @@ impl Widget {
 
                 if let Some(font) = font {
                     if !text.text.is_empty() {
-                        let text_y = geometry.y + geometry.margin + geometry.padding + text.size as usize;
+                        let text_y = geometry.y + geometry.padding + text.size as usize;
 
                         geometry.content_height = crate::graphics::primitives::draw_text_formatted(
                             framebuffer,
                             buffer_width,
-                            geometry.x + geometry.margin + geometry.padding,
+                            geometry.x + geometry.padding,
                             text_y,
                             &text.text,
                             font,
@@ -844,7 +844,7 @@ impl Widget {
                             geometry.width.saturating_sub(geometry.padding * 2),
                             geometry.scroll_offset_y,
                             geometry.height.saturating_sub(geometry.padding * 2),
-                            geometry.y + geometry.margin,
+                            geometry.y,
                         );
                     }
                 }
@@ -853,8 +853,8 @@ impl Widget {
                 crate::graphics::primitives::draw_background_style(
                     framebuffer,
                     buffer_width,
-                    geometry.x + geometry.margin,
-                    geometry.y + geometry.margin,
+                    geometry.x,
+                    geometry.y,
                     geometry.width,
                     geometry.height,
                     geometry.border_radius,
@@ -875,12 +875,12 @@ impl Widget {
                         text.text.clone()
                     };
 
-                    let text_y = geometry.y + geometry.margin + geometry.padding + text.size as usize;
+                    let text_y = geometry.y + geometry.padding + text.size as usize;
 
                     geometry.content_height = crate::graphics::primitives::draw_text_formatted(
                         framebuffer,
                         buffer_width,
-                        geometry.x + geometry.margin + geometry.padding,
+                        geometry.x + geometry.padding,
                         text_y,
                         &display_text,
                         font,
@@ -889,7 +889,7 @@ impl Widget {
                         geometry.width.saturating_sub(geometry.padding * 2),
                         geometry.scroll_offset_y,
                         geometry.height.saturating_sub(geometry.padding * 2),
-                        geometry.y + geometry.margin,
+                        geometry.y,
                     );
                 }
             }
@@ -897,8 +897,8 @@ impl Widget {
                 crate::graphics::primitives::draw_background_style(
                     framebuffer,
                     buffer_width,
-                    geometry.x + geometry.margin,
-                    geometry.y + geometry.margin,
+                    geometry.x,
+                    geometry.y,
                     geometry.width,
                     geometry.height,
                     geometry.border_radius,
