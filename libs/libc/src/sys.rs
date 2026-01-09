@@ -190,3 +190,61 @@ pub unsafe extern "C" fn sigdelset(set: *mut u32, signum: c_int) -> c_int {
 pub unsafe extern "C" fn sigismember(set: *const u32, signum: c_int) -> c_int { if (*set & (1 << (signum - 1))) != 0 { 1 } else { 0 } }
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sigprocmask(_how: c_int, _set: *const u32, _oldset: *mut u32) -> c_int { 0 }
+
+#[repr(C)]
+pub struct jmp_buf {
+    regs: [u64; 8],
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn _setjmp(env: *mut jmp_buf) -> c_int {
+    let res: c_int;
+    core::arch::asm!(
+        "call setjmp",
+        in("rdi") env,
+        lateout("rax") res,
+        options(nostack)
+    );
+    res
+}
+
+core::arch::global_asm!(
+    ".global setjmp",
+    "setjmp:",
+    "mov [rdi], rbx",
+    "mov [rdi + 8], rbp",
+    "mov [rdi + 16], r12",
+    "mov [rdi + 24], r13",
+    "mov [rdi + 32], r14",
+    "mov [rdi + 40], r15",
+    "lea rdx, [rsp + 8]",
+    "mov [rdi + 48], rdx",
+    "mov rdx, [rsp]",
+    "mov [rdi + 56], rdx",
+    "xor rax, rax",
+    "ret"
+);
+
+core::arch::global_asm!(
+    ".global longjmp",
+    "longjmp:",
+    "mov rbx, [rdi]",
+    "mov rbp, [rdi + 8]",
+    "mov r12, [rdi + 16]",
+    "mov r13, [rdi + 24]",
+    "mov r14, [rdi + 32]",
+    "mov r15, [rdi + 40]",
+    "mov rsp, [rdi + 48]",
+    "mov rdx, [rdi + 56]", 
+    "mov rax, rsi",        
+    "test rax, rax",
+    "jnz 1f",
+    "inc rax",             
+    "1: jmp rdx"
+);
+
+unsafe extern "C" {
+    pub fn setjmp(env: *mut jmp_buf) -> c_int;
+    pub fn longjmp(env: *mut jmp_buf, val: c_int) -> !;
+}
+
