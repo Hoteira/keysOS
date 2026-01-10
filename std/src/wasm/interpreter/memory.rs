@@ -24,10 +24,10 @@ impl Interpreter {
                     0x2F => self.stack.push(Value::I32(u16::from_le_bytes(self.memory[addr..addr+2].try_into().unwrap()) as i32)),
                     0x30 => self.stack.push(Value::I64(self.memory[addr] as i8 as i64)),
                     0x31 => self.stack.push(Value::I64(self.memory[addr] as i64)),
-                    0x32 => self.stack.push(Value::I64(i32::from_le_bytes(self.memory[addr..addr+4].try_into().unwrap()) as i64)),
-                    0x33 => self.stack.push(Value::I64(u32::from_le_bytes(self.memory[addr..addr+4].try_into().unwrap()) as i64)),
-                    0x34 => self.stack.push(Value::I64(i16::from_le_bytes(self.memory[addr..addr+2].try_into().unwrap()) as i64)),
-                    0x35 => self.stack.push(Value::I64(u16::from_le_bytes(self.memory[addr..addr+2].try_into().unwrap()) as i64)),
+                    0x32 => self.stack.push(Value::I64(i16::from_le_bytes(self.memory[addr..addr+2].try_into().unwrap()) as i64)),
+                    0x33 => self.stack.push(Value::I64(u16::from_le_bytes(self.memory[addr..addr+2].try_into().unwrap()) as i64)),
+                    0x34 => self.stack.push(Value::I64(i32::from_le_bytes(self.memory[addr..addr+4].try_into().unwrap()) as i64)),
+                    0x35 => self.stack.push(Value::I64(u32::from_le_bytes(self.memory[addr..addr+4].try_into().unwrap()) as i64)),
                     _ => unreachable!(),
                 }
             }

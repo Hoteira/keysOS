@@ -40,7 +40,24 @@ impl Interpreter {
             0x6A..=0x78 => {
                 let b = self.pop_i32()?;
                 let a = self.pop_i32()?;
-                let r = match opcode { 0x6A => a.wrapping_add(b), 0x6B => a.wrapping_sub(b), 0x6C => a.wrapping_mul(b), 0x6D => if b == 0 { return Err("div0") } else { a / b }, 0x6E => if b == 0 { return Err("div0") } else { (a as u32 / b as u32) as i32 }, 0x6F => if b == 0 { return Err("div0") } else { a % b }, 0x70 => if b == 0 { return Err("div0") } else { (a as u32 % b as u32) as i32 }, 0x71 => a & b, 0x72 => a | b, 0x73 => a ^ b, 0x74 => a.wrapping_shl(b as u32), 0x75 => a.wrapping_shr(b as u32), 0x76 => (a as u32).wrapping_shr(b as u32) as i32, 0x77 => a.rotate_left(b as u32), 0x78 => a.rotate_right(b as u32), _ => 0 };
+                let r = match opcode { 
+                    0x6A => a.wrapping_add(b), 
+                    0x6B => a.wrapping_sub(b), 
+                    0x6C => a.wrapping_mul(b), 
+                    0x6D => if b == 0 { return Err("div0") } else if a == i32::MIN && b == -1 { return Err("overflow") } else { a / b }, 
+                    0x6E => if b == 0 { return Err("div0") } else { (a as u32 / b as u32) as i32 }, 
+                    0x6F => if b == 0 { return Err("div0") } else if a == i32::MIN && b == -1 { 0 } else { a % b }, 
+                    0x70 => if b == 0 { return Err("div0") } else { (a as u32 % b as u32) as i32 }, 
+                    0x71 => a & b, 
+                    0x72 => a | b, 
+                    0x73 => a ^ b, 
+                    0x74 => a.wrapping_shl(b as u32), 
+                    0x75 => a.wrapping_shr(b as u32), 
+                    0x76 => (a as u32).wrapping_shr(b as u32) as i32, 
+                    0x77 => a.rotate_left(b as u32), 
+                    0x78 => a.rotate_right(b as u32), 
+                    _ => 0 
+                };
                 self.stack.push(Value::I32(r));
             }
             0x79..=0x7B => {
@@ -51,7 +68,24 @@ impl Interpreter {
             0x7C..=0x8A => {
                 let b = self.pop_i64()?;
                 let a = self.pop_i64()?;
-                let r = match opcode { 0x7C => a.wrapping_add(b), 0x7D => a.wrapping_sub(b), 0x7E => a.wrapping_mul(b), 0x7F => if b == 0 { return Err("div0") } else { a / b }, 0x80 => if b == 0 { return Err("div0") } else { (a as u64 / b as u64) as i64 }, 0x81 => if b == 0 { return Err("div0") } else { a % b }, 0x82 => if b == 0 { return Err("div0") } else { (a as u64 % b as u64) as i64 }, 0x83 => a & b, 0x84 => a | b, 0x85 => a ^ b, 0x86 => a.wrapping_shl(b as u32), 0x87 => a.wrapping_shr(b as u32), 0x88 => (a as u64).wrapping_shr(b as u32) as i64, 0x89 => a.rotate_left(b as u32), 0x8A => a.rotate_right(b as u32), _ => 0 };
+                let r = match opcode { 
+                    0x7C => a.wrapping_add(b), 
+                    0x7D => a.wrapping_sub(b), 
+                    0x7E => a.wrapping_mul(b), 
+                    0x7F => if b == 0 { return Err("div0") } else if a == i64::MIN && b == -1 { return Err("overflow") } else { a / b }, 
+                    0x80 => if b == 0 { return Err("div0") } else { (a as u64 / b as u64) as i64 }, 
+                    0x81 => if b == 0 { return Err("div0") } else if a == i64::MIN && b == -1 { 0 } else { a % b }, 
+                    0x82 => if b == 0 { return Err("div0") } else { (a as u64 % b as u64) as i64 }, 
+                    0x83 => a & b, 
+                    0x84 => a | b, 
+                    0x85 => a ^ b, 
+                    0x86 => a.wrapping_shl(b as u32), 
+                    0x87 => a.wrapping_shr(b as u32), 
+                    0x88 => (a as u64).wrapping_shr(b as u32) as i64, 
+                    0x89 => a.rotate_left(b as u32), 
+                    0x8A => a.rotate_right(b as u32), 
+                    _ => 0 
+                };
                 self.stack.push(Value::I64(r));
             }
             0x8B..=0x91 => {

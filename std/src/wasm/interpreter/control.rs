@@ -32,8 +32,23 @@ impl Interpreter {
                 }
             }
             0x05 => { // else
-                let (_, end_pc) = self.find_block_ends(*pc, bytecode)?;
-                *pc = end_pc - 1; // Put PC at 0x0B
+                // If we reach 0x05 during normal execution, we are at the end of the 'true' branch of an 'if'.
+                // We need to skip the 'else' branch and jump directly to the 'end' (0x0B) of the 'if' block.
+                let frame = control_stack.last().ok_or("else without if")?;
+                if frame.opcode != 0x04 { return Err("else outside if"); }
+                
+                let (_, end_pc) = self.find_block_ends(frame.pc, bytecode)?;
+                *pc = end_pc; // Skip to 0x0B
+                
+                // Pop the 'if' frame since we are jumping to its end
+                let frame = control_stack.pop().unwrap();
+                if let Some(_rt) = frame.result_type {
+                    let res = self.stack.pop().ok_or("if res missing")?;
+                    self.stack.truncate(frame.stack_depth);
+                    self.stack.push(res);
+                } else {
+                    self.stack.truncate(frame.stack_depth);
+                }
             }
             0x0C | 0x0D => { // br | br_if
                 let label = Leb128::decode_u32(bytecode, pc);
